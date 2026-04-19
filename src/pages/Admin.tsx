@@ -154,9 +154,16 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="payments">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="payments">
               Payments {pending.length > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{pending.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageCircle className="h-4 w-4 mr-1" /> Support chat
+              {unreadChats > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{unreadChats}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="messages">
+              <Mail className="h-4 w-4 mr-1" /> Contact ({contacts.length})
             </TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
@@ -285,6 +292,35 @@ const Admin = () => {
                       <TableCell>{s.genre ?? "—"}</TableCell>
                       <TableCell><Badge variant="secondary">{s.status}</Badge></TableCell>
                       <TableCell>{new Date(s.updated_at).toLocaleDateString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="chat">
+            <AdminChatPanel profiles={profiles} />
+          </TabsContent>
+
+          <TabsContent value="messages">
+            <Card className="p-0 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow><TableHead>From</TableHead><TableHead>Email</TableHead><TableHead>Message</TableHead><TableHead>Received</TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {contacts.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No contact messages yet</TableCell></TableRow>
+                  )}
+                  {contacts.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>
+                        <a href={`mailto:${c.email}`} className="text-primary hover:underline">{c.email}</a>
+                      </TableCell>
+                      <TableCell className="max-w-md whitespace-pre-wrap text-sm">{c.message}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
