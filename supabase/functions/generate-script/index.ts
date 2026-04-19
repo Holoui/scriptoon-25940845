@@ -14,14 +14,15 @@ interface Body {
   acts?: number;
   episodes?: number;
   pages?: number;
+  words?: number;
 }
 
 type Tier = "free" | "pro" | "premium";
 
-const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; allowSeries: boolean }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  allowSeries: false },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  allowSeries: true  },
-  premium: { pages: 150, acts: 50, episodes: 12, allowSeries: true  },
+const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean }> = {
+  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,  dailyGenerations: 5,                  allowSeries: false },
+  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000, dailyGenerations: 20,                 allowSeries: true  },
+  premium: { pages: 150, acts: 50, episodes: 12, words: 50000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true  },
 };
 
 const SYSTEM = `You are a professional screenwriter. Output valid JSON only, no prose, no markdown.
@@ -79,10 +80,25 @@ Deno.serve(async (req) => {
     const tier: Tier = ((sub?.tier as Tier) ?? "free");
     const limits = LIMITS[tier];
 
+    // Daily generation rate-limit (UTC day window)
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count: usedToday } = await admin
+      .from("script_generations")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", dayStart.toISOString());
+    if ((usedToday ?? 0) >= limits.dailyGenerations) {
+      return new Response(JSON.stringify({
+        error: `Daily limit reached. Your ${tier} plan allows ${limits.dailyGenerations} script(s) per day. Upgrade for more.`,
+      }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // Clamp inputs to plan limits
     const format: "movie" | "series" = body.format === "series" && limits.allowSeries ? "series" : "movie";
     const acts = Math.max(1, Math.min(Number(body.acts) || 3, limits.acts));
-    const pages = Math.max(3, Math.min(Number(body.pages) || Math.min(12, limits.pages), limits.pages));
+    const words = Math.max(500, Math.min(Number(body.words) || Math.min(6000, limits.words), limits.words));
+    const pages = Math.max(3, Math.min(Number(body.pages) || Math.round(words / 230), limits.pages));
     const episodes = format === "series" ? Math.max(1, Math.min(Number(body.episodes) || 2, limits.episodes)) : 1;
 
     const qualityNote = tier === "premium"
@@ -92,8 +108,8 @@ Deno.serve(async (req) => {
       : "Keep it concise and clear — this is a free-tier sample.";
 
     const lengthHint = format === "series"
-      ? `A film series with ${episodes} episode(s). Each episode roughly ${Math.max(3, Math.round(pages / episodes))} pages, structured into ${acts} act(s).`
-      : `A full movie screenplay of approximately ${pages} pages, structured into ${acts} act(s)/chapter(s).`;
+      ? `A film series with ${episodes} episode(s). Total target: ~${words} words across the whole series (~${pages} screenplay pages). Each episode roughly ${Math.max(3, Math.round(pages / episodes))} pages, structured into ${acts} act(s).`
+      : `A full movie screenplay targeting approximately ${words} words (~${pages} pages), structured into ${acts} act(s)/chapter(s). Aim close to the target word count — do not stop short.`;
 
     const userPrompt = `Create a screenplay.
 Genre: ${body.genre || "unspecified"}
@@ -163,6 +179,9 @@ Return ONLY the JSON object as specified.`;
       console.error(insErr);
       return new Response(JSON.stringify({ error: "Could not save script" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // Log the generation for daily-limit tracking (best-effort)
+    await admin.from("script_generations").insert({ user_id: userId });
 
     return new Response(JSON.stringify({ id: inserted.id, title: inserted.title }), {
       status: 200,
