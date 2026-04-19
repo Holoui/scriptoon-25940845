@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SupportChat } from "@/components/SupportChat";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, role, signOut } = useAuth();
@@ -127,6 +128,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </header>
 
       <main className="flex-1">{children}</main>
+
+      {user && role !== "admin" && <SupportChat />}
 
       <footer className="border-t border-border/60 mt-12">
         <div className="container py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
