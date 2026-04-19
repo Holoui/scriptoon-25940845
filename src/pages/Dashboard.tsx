@@ -92,6 +92,71 @@ const Dashboard = () => {
           </Button>
         </div>
 
+        {/* Plan & payment status banners */}
+        <div className="grid md:grid-cols-2 gap-3 mb-6">
+          <Card className="p-4 bg-gradient-card border-border/60">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Current plan</p>
+                <p className="font-display text-2xl font-bold capitalize">{limits.label}</p>
+              </div>
+              {t === "free" ? (
+                <Button asChild size="sm" className="bg-gradient-hero text-white border-0">
+                  <Link to="/pricing">Upgrade</Link>
+                </Button>
+              ) : (
+                <Badge variant={expiringSoon ? "destructive" : "secondary"} className="gap-1">
+                  <Clock className="h-3 w-3" />
+                  {daysLeft !== null && daysLeft > 0 ? `${daysLeft}d left` : "Expired"}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {limits.pages} pages · {limits.acts} acts{limits.allowSeries ? ` · up to ${limits.episodes} episodes` : ""}
+            </p>
+            {expiringSoon && (
+              <p className="text-xs text-destructive mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" /> Renew soon — you'll move to Free when this period ends.
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-4 bg-gradient-card border-border/60">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">Payment status</p>
+            {pendingPayment ? (
+              <div className="flex items-start gap-2">
+                <Clock className="h-5 w-5 text-secondary-foreground shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm">Awaiting verification</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pendingPayment.currency} {Number(pendingPayment.amount).toFixed(2)} · ref{" "}
+                    <span className="font-mono">{pendingPayment.external_reference}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Submitted {new Date(pendingPayment.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+            ) : payments[0]?.status === "successful" ? (
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Payment approved</p>
+                  <p className="text-xs text-muted-foreground">Your {payments[0].tier} plan is active.</p>
+                </div>
+              </div>
+            ) : lastFailed ? (
+              <div className="flex items-start gap-2">
+                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Last payment rejected</p>
+                  <p className="text-xs text-muted-foreground">Need help? Use the chat in the bottom right.</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No payments yet.</p>
+            )}
+          </Card>
+        </div>
+
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
         ) : scripts.length === 0 ? (
