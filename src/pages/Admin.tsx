@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Users, FileText, CreditCard, Loader2, Check, X } from "lucide-react";
+import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle } from "lucide-react";
+import { AdminChatPanel } from "@/components/AdminChatPanel";
 
 type Payment = {
   id: string;
@@ -28,24 +29,39 @@ const Admin = () => {
   const [scripts, setScripts] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subs, setSubs] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [unreadChats, setUnreadChats] = useState(0);
 
   const profileFor = (uid: string) => profiles.find((p) => p.id === uid);
 
   const load = async () => {
-    const [p, s, pay, sub] = await Promise.all([
+    const [p, s, pay, sub, msgs, threads] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("scripts").select("id, title, genre, status, user_id, updated_at").order("updated_at", { ascending: false }),
       supabase.from("payments").select("*").order("created_at", { ascending: false }),
       supabase.from("subscriptions").select("*"),
+      supabase.from("contact_messages").select("*").order("created_at", { ascending: false }),
+      supabase.from("support_threads").select("unread_for_admin").eq("unread_for_admin", true),
     ]);
     setProfiles(p.data ?? []);
     setScripts(s.data ?? []);
     setPayments((pay.data ?? []) as Payment[]);
     setSubs(sub.data ?? []);
+    setContacts(msgs.data ?? []);
+    setUnreadChats(threads.data?.length ?? 0);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const ch = supabase
+      .channel("admin-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_threads" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const approve = async (pmt: Payment) => {
     setActing(pmt.id);
