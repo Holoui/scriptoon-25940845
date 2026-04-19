@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle } from "lucide-react";
 import { AdminChatPanel } from "@/components/AdminChatPanel";
+import { GrantPlanDialog } from "@/components/admin/GrantPlanDialog";
 
 type Payment = {
   id: string;
@@ -260,17 +261,39 @@ const Admin = () => {
             <Card className="p-0 overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Tier</TableHead><TableHead>Joined</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Tier</TableHead>
+                    <TableHead>Renews</TableHead>
+                    <TableHead>Joined</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
                   {profiles.map((p) => {
                     const sub = subs.find((s) => s.user_id === p.id);
+                    const tierVal = sub?.tier ?? "free";
+                    const endVal = sub?.current_period_end ?? null;
+                    const label = p.display_name ?? p.email ?? p.id.slice(0, 8);
                     return (
                       <TableRow key={p.id}>
                         <TableCell>{p.display_name ?? "—"}</TableCell>
                         <TableCell>{p.email ?? "—"}</TableCell>
-                        <TableCell><Badge variant="secondary" className="capitalize">{sub?.tier ?? "free"}</Badge></TableCell>
+                        <TableCell><Badge variant="secondary" className="capitalize">{tierVal}</Badge></TableCell>
+                        <TableCell className="text-xs">
+                          {endVal ? new Date(endVal).toLocaleDateString() : "—"}
+                        </TableCell>
                         <TableCell>{new Date(p.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <GrantPlanDialog
+                            userId={p.id}
+                            userLabel={label}
+                            currentTier={tierVal}
+                            currentPeriodEnd={endVal}
+                            onGranted={load}
+                          />
+                        </TableCell>
                       </TableRow>
                     );
                   })}
