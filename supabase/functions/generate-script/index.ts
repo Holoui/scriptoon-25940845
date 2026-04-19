@@ -172,6 +172,7 @@ Return ONLY the JSON object as specified.`;
       tone: body.tone ?? null,
       characters: body.characters ?? null,
       plot_idea: plot,
+      target_words: words,
       status: "generated",
     }).select("id, title").single();
 
