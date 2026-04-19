@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { MessageCircle, Send, Loader2 } from "lucide-react";
+import { MessageCircle, Send, Loader2, Paperclip, X, FileIcon, Image as ImageIcon } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Thread {
@@ -21,9 +21,15 @@ interface Msg {
   thread_id: string;
   sender_id: string;
   sender_role: "user" | "admin";
-  body: string;
+  body: string | null;
   created_at: string;
+  file_url?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
+  file_size?: number | null;
 }
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 export const SupportChat = () => {
   const { user } = useAuth();
@@ -34,6 +40,8 @@ export const SupportChat = () => {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const loadThreads = async () => {
@@ -56,14 +64,12 @@ export const SupportChat = () => {
       .eq("thread_id", tid)
       .order("created_at", { ascending: true });
     setMessages((data as Msg[]) ?? []);
-    // mark read
     await supabase.from("support_threads").update({ unread_for_user: false }).eq("id", tid);
   };
 
   useEffect(() => { loadThreads(); }, [user]);
   useEffect(() => { if (activeId) loadMessages(activeId); }, [activeId]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -82,40 +88,82 @@ export const SupportChat = () => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const startThread = async () => {
-    if (!user) return;
+  const ensureThread = async (subject: string) => {
+    if (activeId) return activeId;
+    if (!user) return null;
     const { data, error } = await supabase
       .from("support_threads")
-      .insert({ user_id: user.id, subject: "New conversation" })
+      .insert({ user_id: user.id, subject })
       .select()
       .single();
-    if (error) { toast({ title: "Couldn't start chat", description: error.message, variant: "destructive" }); return; }
+    if (error) {
+      toast({ title: "Couldn't start chat", description: error.message, variant: "destructive" });
+      return null;
+    }
     setActiveId(data.id);
-    loadThreads();
+    return data.id as string;
+  };
+
+  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > MAX_FILE_BYTES) {
+      toast({ title: "File too large", description: "Max 10 MB", variant: "destructive" });
+      return;
+    }
+    setPendingFile(f);
   };
 
   const send = async () => {
-    if (!user || !draft.trim()) return;
-    let tid = activeId;
-    if (!tid) {
-      const { data, error } = await supabase
-        .from("support_threads")
-        .insert({ user_id: user.id, subject: draft.slice(0, 60) })
-        .select()
-        .single();
-      if (error) { toast({ title: "Couldn't start chat", variant: "destructive" }); return; }
-      tid = data.id;
-      setActiveId(tid);
-    }
+    if (!user || (!draft.trim() && !pendingFile)) return;
     setSending(true);
-    const { error } = await supabase.from("support_messages").insert({
-      thread_id: tid, sender_id: user.id, sender_role: "user", body: draft.trim(),
-    });
-    setSending(false);
-    if (error) { toast({ title: "Send failed", description: error.message, variant: "destructive" }); return; }
-    setDraft("");
-    loadMessages(tid);
-    loadThreads();
+    try {
+      const tid = await ensureThread(draft.slice(0, 60) || pendingFile?.name?.slice(0, 60) || "New conversation");
+      if (!tid) return;
+
+      let file_url: string | null = null;
+      let file_name: string | null = null;
+      let file_type: string | null = null;
+      let file_size: number | null = null;
+
+      if (pendingFile) {
+        const ext = pendingFile.name.split(".").pop() || "bin";
+        const path = `${tid}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("chat-attachments")
+          .upload(path, pendingFile, { contentType: pendingFile.type, upsert: false });
+        if (upErr) {
+          toast({ title: "Upload failed", description: upErr.message, variant: "destructive" });
+          return;
+        }
+        file_url = path;
+        file_name = pendingFile.name;
+        file_type = pendingFile.type;
+        file_size = pendingFile.size;
+      }
+
+      const { error } = await supabase.from("support_messages").insert({
+        thread_id: tid,
+        sender_id: user.id,
+        sender_role: "user",
+        body: draft.trim() || null,
+        file_url,
+        file_name,
+        file_type,
+        file_size,
+      });
+      if (error) {
+        toast({ title: "Send failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      setDraft("");
+      setPendingFile(null);
+      loadMessages(tid);
+      loadThreads();
+    } finally {
+      setSending(false);
+    }
   };
 
   if (!user) return null;
@@ -139,7 +187,7 @@ export const SupportChat = () => {
       <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
         <SheetHeader className="p-5 border-b">
           <SheetTitle>Chat with support</SheetTitle>
-          <p className="text-xs text-muted-foreground">We usually reply within a few hours.</p>
+          <p className="text-xs text-muted-foreground">We usually reply within a few hours. Attach screenshots up to 10 MB.</p>
         </SheetHeader>
 
         {threads.length > 1 && (
@@ -166,30 +214,94 @@ export const SupportChat = () => {
             </div>
           ) : (
             messages.map((m) => (
-              <div key={m.id} className={`flex ${m.sender_role === "user" ? "justify-end" : "justify-start"}`}>
-                <Card className={`px-3 py-2 max-w-[80%] ${m.sender_role === "user" ? "bg-primary text-primary-foreground" : "bg-card"}`}>
-                  <p className="text-sm whitespace-pre-wrap">{m.body}</p>
-                  <p className={`text-[10px] mt-1 ${m.sender_role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </Card>
-              </div>
+              <ChatBubble key={m.id} msg={m} />
             ))
           )}
         </div>
 
+        {pendingFile && (
+          <div className="px-4 pt-2 pb-0">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm">
+              {pendingFile.type.startsWith("image/") ? <ImageIcon className="h-4 w-4 shrink-0" /> : <FileIcon className="h-4 w-4 shrink-0" />}
+              <span className="truncate flex-1">{pendingFile.name}</span>
+              <span className="text-xs text-muted-foreground">{(pendingFile.size / 1024).toFixed(0)} KB</span>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setPendingFile(null)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="p-4 border-t flex gap-2">
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handlePickFile} />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending}
+            aria-label="Attach file"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Type a message…"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           />
-          <Button onClick={send} disabled={sending || !draft.trim()} className="bg-gradient-hero text-white border-0">
+          <Button onClick={send} disabled={sending || (!draft.trim() && !pendingFile)} className="bg-gradient-hero text-white border-0">
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
       </SheetContent>
     </Sheet>
+  );
+};
+
+const ChatBubble = ({ msg }: { msg: Msg }) => {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const isMine = msg.sender_role === "user";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (msg.file_url) {
+      supabase.storage
+        .from("chat-attachments")
+        .createSignedUrl(msg.file_url, 3600)
+        .then(({ data }) => { if (!cancelled && data) setSignedUrl(data.signedUrl); });
+    }
+    return () => { cancelled = true; };
+  }, [msg.file_url]);
+
+  const isImage = msg.file_type?.startsWith("image/");
+
+  return (
+    <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+      <Card className={`px-3 py-2 max-w-[80%] ${isMine ? "bg-primary text-primary-foreground" : "bg-card"}`}>
+        {msg.file_url && signedUrl && (
+          isImage ? (
+            <a href={signedUrl} target="_blank" rel="noopener noreferrer" className="block mb-2">
+              <img src={signedUrl} alt={msg.file_name ?? "attachment"} className="rounded max-w-full max-h-60 object-cover" />
+            </a>
+          ) : (
+            <a
+              href={signedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              download={msg.file_name ?? undefined}
+              className={`flex items-center gap-2 text-sm underline mb-2 ${isMine ? "" : "text-primary"}`}
+            >
+              <FileIcon className="h-4 w-4" />
+              <span className="truncate">{msg.file_name}</span>
+            </a>
+          )
+        )}
+        {msg.body && <p className="text-sm whitespace-pre-wrap">{msg.body}</p>}
+        <p className={`text-[10px] mt-1 ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+          {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      </Card>
+    </div>
   );
 };
