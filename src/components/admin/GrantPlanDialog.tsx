@@ -8,7 +8,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Crown } from "lucide-react";
+import { Loader2, Crown, RotateCcw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 type Tier = "pro" | "premium";
@@ -28,8 +28,49 @@ export const GrantPlanDialog = ({ userId, userLabel, currentTier, currentPeriodE
   const [months, setMonths] = useState("1");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [todayCount, setTodayCount] = useState<number | null>(null);
 
   const reset = () => { setTier("pro"); setMonths("1"); setReason(""); };
+
+  const loadTodayCount = async () => {
+    const start = new Date(); start.setUTCHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from("script_generations")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", start.toISOString());
+    setTodayCount(count ?? 0);
+  };
+
+  const resetDailyCount = async () => {
+    if (!confirm(`Reset today's generation count for ${userLabel}?`)) return;
+    setResetting(true);
+    try {
+      const start = new Date(); start.setUTCHours(0, 0, 0, 0);
+      const { error } = await supabase
+        .from("script_generations")
+        .delete()
+        .eq("user_id", userId)
+        .gte("created_at", start.toISOString());
+      if (error) throw error;
+
+      await supabase.from("notifications").insert({
+        user_id: userId,
+        kind: "generations_reset",
+        title: "Daily generation limit reset",
+        body: "An admin reset your daily script generation count. You can generate again today.",
+      });
+
+      toast({ title: "Daily count reset", description: `${userLabel} can generate again today.` });
+      setTodayCount(0);
+      onGranted?.();
+    } catch (e: any) {
+      toast({ title: "Couldn't reset", description: e.message, variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const submit = async () => {
     if (!adminUser || !reason.trim()) {
@@ -92,7 +133,7 @@ export const GrantPlanDialog = ({ userId, userLabel, currentTier, currentPeriodE
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) loadTodayCount(); else reset(); }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="gap-1">
           <Crown className="h-3 w-3" /> Grant
@@ -141,6 +182,25 @@ export const GrantPlanDialog = ({ userId, userLabel, currentTier, currentPeriodE
               placeholder="e.g. Comp for refund · Paid in cash · Beta tester reward"
               rows={3}
             />
+          </div>
+
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Daily generations</p>
+              <p className="text-xs text-muted-foreground">
+                Used today: <span className="font-mono text-foreground">{todayCount ?? "…"}</span>
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={resetDailyCount}
+              disabled={resetting || todayCount === 0}
+              className="gap-1 shrink-0"
+            >
+              {resetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+              Reset count
+            </Button>
           </div>
         </div>
 
