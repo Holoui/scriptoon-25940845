@@ -10,7 +10,19 @@ interface Body {
   tone?: string;
   characters?: string;
   plot_idea?: string;
+  format?: "movie" | "series";
+  acts?: number;
+  episodes?: number;
+  pages?: number;
 }
+
+type Tier = "free" | "pro" | "premium";
+
+const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; allowSeries: boolean }> = {
+  free:    { pages: 12,  acts: 2,  episodes: 2,  allowSeries: false },
+  pro:     { pages: 60,  acts: 10, episodes: 6,  allowSeries: true  },
+  premium: { pages: 150, acts: 50, episodes: 12, allowSeries: true  },
+};
 
 const SYSTEM = `You are a professional screenwriter. Output valid JSON only, no prose, no markdown.
 Schema:
@@ -29,7 +41,8 @@ Screenplay format rules:
 - Parentheticals in (lowercase) on their own line between cue and dialogue
 - Transitions like CUT TO: or FADE OUT. on their own line, all caps
 - Start with "FADE IN:" and end with "FADE OUT."
-- Aim for 8-15 scenes for a short, 20-40 for a long-form, with full dialogue.`;
+- For series, separate each episode with a heading like:
+  "=== EPISODE 1: <TITLE> ===" then "FADE IN:" then scenes, then "END OF EPISODE 1".`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -61,13 +74,26 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "plot_idea is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Subscription tier — longer scripts for paid users
     const admin = createClient(SUPABASE_URL, SERVICE);
     const { data: sub } = await admin.from("subscriptions").select("tier").eq("user_id", userId).maybeSingle();
-    const tier = (sub?.tier as string) ?? "free";
-    const lengthHint = tier === "free" ? "Short film length (8-12 scenes, ~10 pages)." :
-                       tier === "pro" ? "Half-hour length (20-30 scenes, ~25-30 pages)." :
-                       "Feature-length (40+ scenes, rich subtext and subplots).";
+    const tier: Tier = ((sub?.tier as Tier) ?? "free");
+    const limits = LIMITS[tier];
+
+    // Clamp inputs to plan limits
+    const format: "movie" | "series" = body.format === "series" && limits.allowSeries ? "series" : "movie";
+    const acts = Math.max(1, Math.min(Number(body.acts) || 3, limits.acts));
+    const pages = Math.max(3, Math.min(Number(body.pages) || Math.min(12, limits.pages), limits.pages));
+    const episodes = format === "series" ? Math.max(1, Math.min(Number(body.episodes) || 2, limits.episodes)) : 1;
+
+    const qualityNote = tier === "premium"
+      ? "Use rich, layered character development, vivid subtext, distinct character voices, and cinematic scene craft."
+      : tier === "pro"
+      ? "Maintain professional pacing and clear character arcs."
+      : "Keep it concise and clear — this is a free-tier sample.";
+
+    const lengthHint = format === "series"
+      ? `A film series with ${episodes} episode(s). Each episode roughly ${Math.max(3, Math.round(pages / episodes))} pages, structured into ${acts} act(s).`
+      : `A full movie screenplay of approximately ${pages} pages, structured into ${acts} act(s)/chapter(s).`;
 
     const userPrompt = `Create a screenplay.
 Genre: ${body.genre || "unspecified"}
@@ -75,7 +101,9 @@ Tone: ${body.tone || "unspecified"}
 Main characters: ${body.characters || "create as needed"}
 Plot idea: ${plot}
 
-Length target: ${lengthHint}
+Format: ${format}
+${lengthHint}
+${qualityNote}
 
 Return ONLY the JSON object as specified.`;
 
