@@ -247,6 +247,7 @@ export type Database = {
           plot_idea: string | null
           status: string
           synopsis: string | null
+          target_words: number | null
           title: string
           tone: string | null
           updated_at: string
@@ -262,6 +263,7 @@ export type Database = {
           plot_idea?: string | null
           status?: string
           synopsis?: string | null
+          target_words?: number | null
           title?: string
           tone?: string | null
           updated_at?: string
@@ -277,6 +279,7 @@ export type Database = {
           plot_idea?: string | null
           status?: string
           synopsis?: string | null
+          target_words?: number | null
           title?: string
           tone?: string | null
           updated_at?: string

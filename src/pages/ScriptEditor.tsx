@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target } from "lucide-react";
 import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
@@ -24,6 +24,7 @@ interface Script {
   genre: string | null;
   status: string;
   user_id: string;
+  target_words: number | null;
 }
 
 interface Version { id: string; version_number: number; created_at: string; content: string; }
@@ -41,6 +42,9 @@ const ScriptEditor = () => {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
+  const [extending, setExtending] = useState(false);
+  const [autoExtend, setAutoExtend] = useState(false);
+  const autoCancelRef = useRef(false);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
 
@@ -120,6 +124,60 @@ const ScriptEditor = () => {
   const handleExport = () => {
     if (!script) return;
     exportScreenplayPDF({ title: title || "Untitled", content });
+  };
+
+  const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number } | null> => {
+    if (!script) return null;
+    const target = script.target_words ?? Math.min(6000, limits.words);
+    // Persist any pending edits before asking AI to continue
+    if (dirtyRef.current) await save(false);
+    const { data, error } = await supabase.functions.invoke("extend-script", {
+      body: { script_id: script.id, target_words: target },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    if (data?.content) {
+      setContent(data.content);
+      dirtyRef.current = false;
+      setSavedAt(new Date());
+    }
+    return { done: !!data?.done, added: data?.added ?? 0, words: data?.words ?? 0, target: data?.target ?? target };
+  };
+
+  const handleExtend = async () => {
+    if (!script || extending) return;
+    setExtending(true);
+    autoCancelRef.current = false;
+    try {
+      if (!autoExtend) {
+        const r = await extendOnce();
+        if (r) toast({ title: `Added ~${r.added} words`, description: `${r.words} / ${r.target} words` });
+        return;
+      }
+      // Auto-extend: keep calling until target reached, AI stalls, or user cancels
+      let lastWords = countWords(content);
+      let iterations = 0;
+      while (iterations < 10) {
+        if (autoCancelRef.current) break;
+        const r = await extendOnce();
+        if (!r) break;
+        if (r.done) {
+          toast({ title: "Target reached", description: `${r.words} / ${r.target} words` });
+          break;
+        }
+        if (r.words <= lastWords + 100) {
+          toast({ title: "AI couldn't add more", description: `Stopped at ${r.words} / ${r.target} words` });
+          break;
+        }
+        lastWords = r.words;
+        iterations++;
+      }
+    } catch (err: any) {
+      toast({ title: "Couldn't extend script", description: err?.message ?? "Extension failed", variant: "destructive" });
+    } finally {
+      setExtending(false);
+      autoCancelRef.current = false;
+    }
   };
 
   if (loading) {
@@ -210,25 +268,65 @@ const ScriptEditor = () => {
             {(() => {
               const words = countWords(content);
               const pages = wordsToPages(words);
-              const pct = Math.min(100, (pages / limits.pages) * 100);
-              const over = pages > limits.pages;
-              const near = !over && pct >= 85;
+              const target = script.target_words ?? Math.min(6000, limits.words);
+              const targetPct = Math.min(100, (words / target) * 100);
+              const planPct = Math.min(100, (pages / limits.pages) * 100);
+              const overPlan = pages > limits.pages;
+              const nearPlan = !overPlan && planPct >= 85;
+              const reachedTarget = words >= target - 50;
+              const shortfall = Math.max(0, target - words);
               return (
-                <div className="border-b border-border/60 px-5 py-3 space-y-2">
+                <div className="border-b border-border/60 px-5 py-3 space-y-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="font-display text-lg font-bold">Screenplay</p>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="font-mono">{words} words</Badge>
-                      <Badge variant={over ? "destructive" : near ? "secondary" : "outline"}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="font-mono gap-1">
+                        <Target className="h-3 w-3" /> {words.toLocaleString()} / {target.toLocaleString()} words
+                      </Badge>
+                      <Badge variant={overPlan ? "destructive" : nearPlan ? "secondary" : "outline"}>
                         {pages} / {limits.pages} pages
                       </Badge>
                     </div>
                   </div>
-                  <Progress value={pct} className={over ? "[&>div]:bg-destructive" : near ? "[&>div]:bg-secondary" : ""} />
-                  {over && (
+                  <Progress
+                    value={targetPct}
+                    className={reachedTarget ? "[&>div]:bg-primary" : ""}
+                  />
+                  <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
+                    <p className="text-muted-foreground">
+                      {reachedTarget
+                        ? "🎯 Target reached — you can keep extending or polish what's there."
+                        : `${shortfall.toLocaleString()} words to go to hit your target.`}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="accent-primary"
+                          checked={autoExtend}
+                          onChange={(e) => setAutoExtend(e.target.checked)}
+                          disabled={extending}
+                        />
+                        Auto until target
+                      </label>
+                      <Button
+                        size="sm"
+                        onClick={handleExtend}
+                        disabled={extending || overPlan}
+                        className="bg-gradient-hero text-white border-0 hover:opacity-90"
+                      >
+                        {extending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
+                        ) : (
+                          <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  {overPlan && (
                     <p className="text-xs text-destructive flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
-                      You're over your {limits.label} plan limit. Consider upgrading or trimming.
+                      You're over your {limits.label} plan limit. Upgrade to extend further.
                     </p>
                   )}
                 </div>
