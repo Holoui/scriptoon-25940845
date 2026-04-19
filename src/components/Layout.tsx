@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SupportChat } from "@/components/SupportChat";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, role, signOut } = useAuth();
@@ -73,6 +74,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </nav>
 
           <div className="flex items-center gap-2">
+            {user && <NotificationBell />}
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

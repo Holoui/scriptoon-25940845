@@ -72,6 +72,14 @@ export const MoMoPaymentDialog = ({ open, onOpenChange, tier, amount }: Props) =
       toast({ title: "Couldn't submit", description: error.message, variant: "destructive" });
       return;
     }
+    // Fire-and-forget admin notification (don't block UI on email)
+    supabase.functions.invoke("notify-admins", {
+      body: {
+        kind: "new_payment",
+        userEmail: user.email,
+        details: { tier, amount, currency: "GHS", phone: cleaned, reference },
+      },
+    }).catch(() => {});
     setStep("submitted");
   };
 
