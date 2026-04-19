@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,26 +12,24 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Sparkles, Wand2, Lock } from "lucide-react";
+import { PLAN_LIMITS, wordOptionsForTier, type Tier } from "@/lib/plan-limits";
 
 const GENRES = ["Romance", "Thriller", "Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Fantasy", "Mystery", "Adventure"];
 const TONES = ["Light & playful", "Dark & gritty", "Heartwarming", "Suspenseful", "Quirky & offbeat", "Epic & cinematic", "Satirical"];
 
-type Tier = "free" | "pro" | "premium";
-
-const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; allowSeries: boolean }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  allowSeries: false },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  allowSeries: true  },
-  premium: { pages: 150, acts: 50, episodes: 12, allowSeries: true  },
-};
-
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+const fmtNum = (n: number) => n.toLocaleString();
 
 const NewScript = () => {
   const navigate = useNavigate();
   const { user, tier } = useAuth();
   const t: Tier = (tier ?? "free") as Tier;
-  const limits = LIMITS[t];
+  const limits = PLAN_LIMITS[t];
   const [loading, setLoading] = useState(false);
+  const [usedToday, setUsedToday] = useState<number>(0);
+
+  const wordChoices = useMemo(() => wordOptionsForTier(t), [t]);
+  const defaultWords = useMemo(() => Math.min(6000, limits.words), [limits.words]);
 
   const [form, setForm] = useState({
     genre: "",
@@ -42,7 +39,7 @@ const NewScript = () => {
     format: "movie" as "movie" | "series",
     acts: 3,
     episodes: 2,
-    pages: Math.min(12, limits.pages),
+    words: defaultWords,
   });
 
   const update = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
@@ -50,17 +47,35 @@ const NewScript = () => {
 
   const actOptions = useMemo(() => range(limits.acts), [limits.acts]);
   const episodeOptions = useMemo(() => range(limits.episodes), [limits.episodes]);
-  const pageOptions = useMemo(() => {
-    const set = new Set([5, 10, 12, 20, 30, 45, 60, 90, 120, 150].filter((p) => p <= limits.pages));
-    set.add(limits.pages);
-    return Array.from(set).sort((a, b) => a - b);
-  }, [limits.pages]);
+
+  // Load today's generation count
+  useEffect(() => {
+    (async () => {
+      if (!user) return;
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from("script_generations")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", dayStart.toISOString());
+      setUsedToday(count ?? 0);
+    })();
+  }, [user]);
+
+  const dailyLimit = limits.dailyGenerations;
+  const unlimited = !isFinite(dailyLimit);
+  const remaining = unlimited ? Infinity : Math.max(0, dailyLimit - usedToday);
+  const blocked = !unlimited && remaining <= 0;
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!form.plot_idea.trim()) {
       toast({ title: "Plot idea required", variant: "destructive" });
+      return;
+    }
+    if (blocked) {
+      toast({ title: "Daily limit reached", description: `Your ${t} plan allows ${dailyLimit} script(s) per day. Upgrade for more.`, variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -72,7 +87,7 @@ const NewScript = () => {
         plot_idea: form.plot_idea,
         format: form.format,
         acts: form.acts,
-        pages: form.pages,
+        words: form.words,
         episodes: form.format === "series" ? form.episodes : undefined,
       };
       const { data, error } = await supabase.functions.invoke("generate-script", { body: payload });
@@ -97,9 +112,14 @@ const NewScript = () => {
             </span>
             <h1 className="font-display text-4xl md:text-5xl font-black mb-2">Describe your story</h1>
             <p className="text-muted-foreground">The more detail, the more magic.</p>
-            <Badge variant="secondary" className="mt-3 capitalize">
-              {t} plan · max {limits.pages} pages · {limits.acts} acts{limits.allowSeries ? ` · ${limits.episodes} episodes` : ""}
-            </Badge>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
+              <Badge variant="secondary" className="capitalize">
+                {t} plan · up to {fmtNum(limits.words)} words · {limits.acts} acts{limits.allowSeries ? ` · ${limits.episodes} episodes` : ""}
+              </Badge>
+              <Badge variant={blocked ? "destructive" : "outline"}>
+                {unlimited ? "Unlimited today" : `${remaining}/${dailyLimit} left today`}
+              </Badge>
+            </div>
           </div>
 
           <Card className="p-6 md:p-8 bg-gradient-card border-border/60 shadow-soft">
@@ -160,11 +180,15 @@ const NewScript = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Target pages</Label>
-                  <Select value={String(form.pages)} onValueChange={(v) => update("pages", Number(v))}>
+                  <Label>Target word count</Label>
+                  <Select value={String(form.words)} onValueChange={(v) => update("words", Number(v))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {pageOptions.map((n) => <SelectItem key={n} value={String(n)}>{n} pages</SelectItem>)}
+                      {wordChoices.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {fmtNum(n)} words · ~{Math.round(n / 230)} pages
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -204,7 +228,13 @@ const NewScript = () => {
                 />
               </div>
 
-              <Button type="submit" className="w-full bg-gradient-hero text-white border-0 hover:opacity-90 h-12 text-base shadow-playful" disabled={loading}>
+              {blocked && (
+                <p className="text-sm text-destructive text-center">
+                  You've used all {dailyLimit} of today's generations. Resets at midnight or upgrade for more.
+                </p>
+              )}
+
+              <Button type="submit" className="w-full bg-gradient-hero text-white border-0 hover:opacity-90 h-12 text-base shadow-playful" disabled={loading || blocked}>
                 {loading ? (
                   <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Crafting your screenplay…</>
                 ) : (
