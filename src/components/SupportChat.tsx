@@ -119,8 +119,9 @@ export const SupportChat = () => {
     if (!user || (!draft.trim() && !pendingFile)) return;
     setSending(true);
     try {
-      const tid = await ensureThread(draft.slice(0, 60) || pendingFile?.name?.slice(0, 60) || "New conversation");
-      if (!tid) return;
+      const result = await ensureThread(draft.slice(0, 60) || pendingFile?.name?.slice(0, 60) || "New conversation");
+      if (!result) return;
+      const tid = result.id;
 
       let file_url: string | null = null;
       let file_name: string | null = null;
@@ -157,6 +158,18 @@ export const SupportChat = () => {
         toast({ title: "Send failed", description: error.message, variant: "destructive" });
         return;
       }
+
+      // Notify admins on new threads only
+      if (result.isNew) {
+        supabase.functions.invoke("notify-admins", {
+          body: {
+            kind: "new_chat_thread",
+            userEmail: user.email,
+            details: { subject: draft.slice(0, 60) || pendingFile?.name || "New conversation", preview: draft.trim().slice(0, 200) },
+          },
+        }).catch(() => {});
+      }
+
       setDraft("");
       setPendingFile(null);
       loadMessages(tid);
