@@ -4,14 +4,16 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, FileText, Loader2, Trash2, Crown, Edit3 } from "lucide-react";
+import { Plus, FileText, Loader2, Trash2, Crown, Edit3, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PLAN_LIMITS, type Tier } from "@/lib/plan-limits";
 
 interface Script {
   id: string;
@@ -22,22 +24,36 @@ interface Script {
   updated_at: string;
 }
 
+interface Payment {
+  id: string;
+  tier: string;
+  amount: number;
+  currency: string;
+  status: "pending" | "successful" | "failed";
+  external_reference: string | null;
+  created_at: string;
+}
+
 const Dashboard = () => {
-  const { user, tier } = useAuth();
+  const { user, tier, periodEnd } = useAuth();
   const [scripts, setScripts] = useState<Script[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const t: Tier = (tier ?? "free") as Tier;
+  const limits = PLAN_LIMITS[t];
 
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("scripts")
-      .select("id, title, logline, genre, status, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false });
-    if (error) toast({ title: "Failed to load scripts", description: error.message, variant: "destructive" });
-    setScripts((data as Script[]) ?? []);
+    const [scriptsRes, paymentsRes] = await Promise.all([
+      supabase.from("scripts").select("id, title, logline, genre, status, updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }),
+      supabase.from("payments").select("id, tier, amount, currency, status, external_reference, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
+    ]);
+    if (scriptsRes.error) toast({ title: "Failed to load scripts", description: scriptsRes.error.message, variant: "destructive" });
+    setScripts((scriptsRes.data as Script[]) ?? []);
+    setPayments((paymentsRes.data as Payment[]) ?? []);
     setLoading(false);
   };
 
@@ -51,6 +67,12 @@ const Dashboard = () => {
     setDeleteId(null);
     load();
   };
+
+  // Plan expiry math
+  const daysLeft = periodEnd ? Math.ceil((new Date(periodEnd).getTime() - Date.now()) / 86400000) : null;
+  const expiringSoon = t !== "free" && daysLeft !== null && daysLeft <= 7;
+  const pendingPayment = payments.find((p) => p.status === "pending");
+  const lastFailed = payments.find((p) => p.status === "failed");
 
   return (
     <Layout>
