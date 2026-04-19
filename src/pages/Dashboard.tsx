@@ -92,6 +92,24 @@ const Dashboard = () => {
           </Button>
         </div>
 
+        {/* 7-day expiry banner */}
+        {expiringSoon && daysLeft !== null && daysLeft > 0 && (
+          <Card className="p-4 mb-4 border-destructive/40 bg-destructive/5 flex flex-wrap items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm">
+                Your <span className="capitalize">{tier}</span> plan ends in {daysLeft} day{daysLeft === 1 ? "" : "s"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Renew before {new Date(periodEnd!).toLocaleDateString()} to keep your benefits — otherwise you'll be moved to Free automatically.
+              </p>
+            </div>
+            <Button asChild size="sm" className="bg-gradient-hero text-white border-0">
+              <Link to="/pricing">Renew now</Link>
+            </Button>
+          </Card>
+        )}
+
         {/* Plan & payment status banners */}
         <div className="grid md:grid-cols-2 gap-3 mb-6">
           <Card className="p-4 bg-gradient-card border-border/60">

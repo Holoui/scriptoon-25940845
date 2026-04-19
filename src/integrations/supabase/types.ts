@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          read: boolean
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          read?: boolean
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          read?: boolean
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -79,6 +109,49 @@ export type Database = {
           status?: Database["public"]["Enums"]["payment_status"]
           tier?: Database["public"]["Enums"]["subscription_tier"]
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      plan_grants: {
+        Row: {
+          created_at: string
+          duration_months: number
+          granted_by: string
+          id: string
+          new_period_end: string
+          previous_period_end: string | null
+          previous_tier: Database["public"]["Enums"]["subscription_tier"] | null
+          reason: string
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_months: number
+          granted_by: string
+          id?: string
+          new_period_end: string
+          previous_period_end?: string | null
+          previous_tier?:
+            | Database["public"]["Enums"]["subscription_tier"]
+            | null
+          reason: string
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_months?: number
+          granted_by?: string
+          id?: string
+          new_period_end?: string
+          previous_period_end?: string | null
+          previous_tier?:
+            | Database["public"]["Enums"]["subscription_tier"]
+            | null
+          reason?: string
+          tier?: Database["public"]["Enums"]["subscription_tier"]
           user_id?: string
         }
         Relationships: []
@@ -222,24 +295,36 @@ export type Database = {
       }
       support_messages: {
         Row: {
-          body: string
+          body: string | null
           created_at: string
+          file_name: string | null
+          file_size: number | null
+          file_type: string | null
+          file_url: string | null
           id: string
           sender_id: string
           sender_role: string
           thread_id: string
         }
         Insert: {
-          body: string
+          body?: string | null
           created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string | null
           id?: string
           sender_id: string
           sender_role: string
           thread_id: string
         }
         Update: {
-          body?: string
+          body?: string | null
           created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string | null
           id?: string
           sender_id?: string
           sender_role?: string
