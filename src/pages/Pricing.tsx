@@ -14,29 +14,29 @@ const tiers = [
   {
     id: "free" as const,
     name: "Free",
-    price: "0",
+    price: 0,
     icon: Sparkles,
     blurb: "Perfect for trying things out.",
-    features: ["3 short scripts / month", "Basic export (PDF)", "Standard generation speed", "Community support"],
+    features: ["2 chapters per script", "Up to 12 pages", "Basic export (PDF)", "Community support"],
     cta: "Current plan",
   },
   {
     id: "pro" as const,
     name: "Pro",
-    price: "9.99",
+    price: 50,
     icon: Zap,
     blurb: "For serious storytellers.",
-    features: ["Unlimited scripts", "Long-form screenplays", "Faster generation", "Version history", "Priority support"],
+    features: ["Up to 10 chapters / acts", "Up to 60 pages", "Movie or series scripts", "Version history", "Priority support"],
     cta: "Upgrade with MoMo",
     highlight: true,
   },
   {
     id: "premium" as const,
     name: "Premium",
-    price: "24.99",
+    price: 150,
     icon: Crown,
     blurb: "Studio-grade output & control.",
-    features: ["Everything in Pro", "Advanced scene customization", "Regenerate scenes & dialogue", "DOCX export (coming soon)", "Early access features"],
+    features: ["50+ chapters / acts", "100+ pages", "Rich character development", "Regenerate scenes & dialogue", "Early access features"],
     cta: "Go Premium",
   },
 ];
@@ -62,7 +62,7 @@ const Pricing = () => {
           <h1 className="font-display text-4xl md:text-6xl font-black mb-4 text-balance">
             Simple pricing, <span className="bg-gradient-hero bg-clip-text text-transparent">powered by MoMo</span>
           </h1>
-          <p className="text-muted-foreground text-lg">Pay with MTN Mobile Money — no card required.</p>
+          <p className="text-muted-foreground text-lg">Pay with MTN Mobile Money in Ghana Cedis — no card required.</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
@@ -85,7 +85,7 @@ const Pricing = () => {
                 <h3 className="font-display text-2xl font-bold">{t.name}</h3>
                 <p className="text-muted-foreground text-sm mb-4">{t.blurb}</p>
                 <div className="mb-6">
-                  <span className="font-display text-4xl font-black">€{t.price}</span>
+                  <span className="font-display text-4xl font-black">GHS {t.price}</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
@@ -114,7 +114,7 @@ const Pricing = () => {
         open={!!openTier}
         onOpenChange={(o) => !o && setOpenTier(null)}
         tier={openTier ?? "pro"}
-        amount={openTier === "premium" ? 24.99 : 9.99}
+        amount={openTier === "premium" ? 150 : 50}
       />
     </Layout>
   );
