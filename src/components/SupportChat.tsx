@@ -88,8 +88,8 @@ export const SupportChat = () => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const ensureThread = async (subject: string) => {
-    if (activeId) return activeId;
+  const ensureThread = async (subject: string): Promise<{ id: string; isNew: boolean } | null> => {
+    if (activeId) return { id: activeId, isNew: false };
     if (!user) return null;
     const { data, error } = await supabase
       .from("support_threads")
@@ -101,7 +101,7 @@ export const SupportChat = () => {
       return null;
     }
     setActiveId(data.id);
-    return data.id as string;
+    return { id: data.id as string, isNew: true };
   };
 
   const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
