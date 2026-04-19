@@ -6,12 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Download, ArrowLeft, Save, History, Check } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle } from "lucide-react";
 import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
 
 interface Script {
   id: string;
@@ -28,7 +30,8 @@ interface Version { id: string; version_number: number; created_at: string; cont
 
 const ScriptEditor = () => {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, tier } = useAuth();
+  const limits = PLAN_LIMITS[(tier ?? "free") as Tier];
   const [script, setScript] = useState<Script | null>(null);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
