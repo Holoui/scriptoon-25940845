@@ -9,6 +9,7 @@ interface AuthCtx {
   session: Session | null;
   role: Role | null;
   tier: "free" | "pro" | "premium" | null;
+  periodEnd: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -21,16 +22,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [tier, setTier] = useState<"free" | "pro" | "premium" | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadMeta = async (uid: string) => {
     const [{ data: roles }, { data: sub }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", uid),
-      supabase.from("subscriptions").select("tier").eq("user_id", uid).maybeSingle(),
+      supabase.from("subscriptions").select("tier, current_period_end").eq("user_id", uid).maybeSingle(),
     ]);
     const isAdmin = roles?.some((r) => r.role === "admin");
     setRole(isAdmin ? "admin" : "user");
     setTier((sub?.tier as any) ?? "free");
+    setPeriodEnd((sub as any)?.current_period_end ?? null);
   };
 
   const refresh = async () => {
@@ -46,6 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setRole(null);
         setTier(null);
+        setPeriodEnd(null);
       }
     });
 
@@ -64,7 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <Ctx.Provider value={{ user, session, role, tier, loading, signOut, refresh }}>
+    <Ctx.Provider value={{ user, session, role, tier, periodEnd, loading, signOut, refresh }}>
       {children}
     </Ctx.Provider>
   );

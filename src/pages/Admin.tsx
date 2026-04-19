@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Users, FileText, CreditCard, Loader2, Check, X } from "lucide-react";
+import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle } from "lucide-react";
+import { AdminChatPanel } from "@/components/AdminChatPanel";
 
 type Payment = {
   id: string;
@@ -28,24 +29,39 @@ const Admin = () => {
   const [scripts, setScripts] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subs, setSubs] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [unreadChats, setUnreadChats] = useState(0);
 
   const profileFor = (uid: string) => profiles.find((p) => p.id === uid);
 
   const load = async () => {
-    const [p, s, pay, sub] = await Promise.all([
+    const [p, s, pay, sub, msgs, threads] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("scripts").select("id, title, genre, status, user_id, updated_at").order("updated_at", { ascending: false }),
       supabase.from("payments").select("*").order("created_at", { ascending: false }),
       supabase.from("subscriptions").select("*"),
+      supabase.from("contact_messages").select("*").order("created_at", { ascending: false }),
+      supabase.from("support_threads").select("unread_for_admin").eq("unread_for_admin", true),
     ]);
     setProfiles(p.data ?? []);
     setScripts(s.data ?? []);
     setPayments((pay.data ?? []) as Payment[]);
     setSubs(sub.data ?? []);
+    setContacts(msgs.data ?? []);
+    setUnreadChats(threads.data?.length ?? 0);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const ch = supabase
+      .channel("admin-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_threads" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const approve = async (pmt: Payment) => {
     setActing(pmt.id);
@@ -138,9 +154,16 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="payments">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="payments">
               Payments {pending.length > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{pending.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageCircle className="h-4 w-4 mr-1" /> Support chat
+              {unreadChats > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{unreadChats}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="messages">
+              <Mail className="h-4 w-4 mr-1" /> Contact ({contacts.length})
             </TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
@@ -269,6 +292,35 @@ const Admin = () => {
                       <TableCell>{s.genre ?? "—"}</TableCell>
                       <TableCell><Badge variant="secondary">{s.status}</Badge></TableCell>
                       <TableCell>{new Date(s.updated_at).toLocaleDateString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="chat">
+            <AdminChatPanel profiles={profiles} />
+          </TabsContent>
+
+          <TabsContent value="messages">
+            <Card className="p-0 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow><TableHead>From</TableHead><TableHead>Email</TableHead><TableHead>Message</TableHead><TableHead>Received</TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {contacts.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No contact messages yet</TableCell></TableRow>
+                  )}
+                  {contacts.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>
+                        <a href={`mailto:${c.email}`} className="text-primary hover:underline">{c.email}</a>
+                      </TableCell>
+                      <TableCell className="max-w-md whitespace-pre-wrap text-sm">{c.message}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

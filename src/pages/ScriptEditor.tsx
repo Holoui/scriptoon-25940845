@@ -6,12 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Download, ArrowLeft, Save, History, Check } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle } from "lucide-react";
 import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
 
 interface Script {
   id: string;
@@ -28,7 +30,8 @@ interface Version { id: string; version_number: number; created_at: string; cont
 
 const ScriptEditor = () => {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, tier } = useAuth();
+  const limits = PLAN_LIMITS[(tier ?? "free") as Tier];
   const [script, setScript] = useState<Script | null>(null);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -204,10 +207,33 @@ const ScriptEditor = () => {
           </Card>
 
           <Card className="p-0 overflow-hidden bg-card border-border/60 shadow-soft">
-            <div className="border-b border-border/60 px-5 py-3 flex items-center justify-between">
-              <p className="font-display text-lg font-bold">Screenplay</p>
-              <Badge variant="outline">Courier · {content.split(/\s+/).filter(Boolean).length} words</Badge>
-            </div>
+            {(() => {
+              const words = countWords(content);
+              const pages = wordsToPages(words);
+              const pct = Math.min(100, (pages / limits.pages) * 100);
+              const over = pages > limits.pages;
+              const near = !over && pct >= 85;
+              return (
+                <div className="border-b border-border/60 px-5 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="font-display text-lg font-bold">Screenplay</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="font-mono">{words} words</Badge>
+                      <Badge variant={over ? "destructive" : near ? "secondary" : "outline"}>
+                        {pages} / {limits.pages} pages
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={pct} className={over ? "[&>div]:bg-destructive" : near ? "[&>div]:bg-secondary" : ""} />
+                  {over && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      You're over your {limits.label} plan limit. Consider upgrading or trimming.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <Textarea
               value={content}
               onChange={(e) => { setContent(e.target.value); markDirty(); }}

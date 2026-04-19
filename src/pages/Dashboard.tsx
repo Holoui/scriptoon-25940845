@@ -4,14 +4,16 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, FileText, Loader2, Trash2, Crown, Edit3 } from "lucide-react";
+import { Plus, FileText, Loader2, Trash2, Crown, Edit3, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PLAN_LIMITS, type Tier } from "@/lib/plan-limits";
 
 interface Script {
   id: string;
@@ -22,22 +24,36 @@ interface Script {
   updated_at: string;
 }
 
+interface Payment {
+  id: string;
+  tier: string;
+  amount: number;
+  currency: string;
+  status: "pending" | "successful" | "failed";
+  external_reference: string | null;
+  created_at: string;
+}
+
 const Dashboard = () => {
-  const { user, tier } = useAuth();
+  const { user, tier, periodEnd } = useAuth();
   const [scripts, setScripts] = useState<Script[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const t: Tier = (tier ?? "free") as Tier;
+  const limits = PLAN_LIMITS[t];
 
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("scripts")
-      .select("id, title, logline, genre, status, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false });
-    if (error) toast({ title: "Failed to load scripts", description: error.message, variant: "destructive" });
-    setScripts((data as Script[]) ?? []);
+    const [scriptsRes, paymentsRes] = await Promise.all([
+      supabase.from("scripts").select("id, title, logline, genre, status, updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }),
+      supabase.from("payments").select("id, tier, amount, currency, status, external_reference, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
+    ]);
+    if (scriptsRes.error) toast({ title: "Failed to load scripts", description: scriptsRes.error.message, variant: "destructive" });
+    setScripts((scriptsRes.data as Script[]) ?? []);
+    setPayments((paymentsRes.data as Payment[]) ?? []);
     setLoading(false);
   };
 
@@ -51,6 +67,12 @@ const Dashboard = () => {
     setDeleteId(null);
     load();
   };
+
+  // Plan expiry math
+  const daysLeft = periodEnd ? Math.ceil((new Date(periodEnd).getTime() - Date.now()) / 86400000) : null;
+  const expiringSoon = t !== "free" && daysLeft !== null && daysLeft <= 7;
+  const pendingPayment = payments.find((p) => p.status === "pending");
+  const lastFailed = payments.find((p) => p.status === "failed");
 
   return (
     <Layout>
@@ -68,6 +90,71 @@ const Dashboard = () => {
           <Button asChild size="lg" className="bg-gradient-hero text-white border-0 hover:opacity-90 shadow-playful">
             <Link to="/dashboard/new"><Plus className="mr-2 h-5 w-5" /> New script</Link>
           </Button>
+        </div>
+
+        {/* Plan & payment status banners */}
+        <div className="grid md:grid-cols-2 gap-3 mb-6">
+          <Card className="p-4 bg-gradient-card border-border/60">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Current plan</p>
+                <p className="font-display text-2xl font-bold capitalize">{limits.label}</p>
+              </div>
+              {t === "free" ? (
+                <Button asChild size="sm" className="bg-gradient-hero text-white border-0">
+                  <Link to="/pricing">Upgrade</Link>
+                </Button>
+              ) : (
+                <Badge variant={expiringSoon ? "destructive" : "secondary"} className="gap-1">
+                  <Clock className="h-3 w-3" />
+                  {daysLeft !== null && daysLeft > 0 ? `${daysLeft}d left` : "Expired"}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {limits.pages} pages · {limits.acts} acts{limits.allowSeries ? ` · up to ${limits.episodes} episodes` : ""}
+            </p>
+            {expiringSoon && (
+              <p className="text-xs text-destructive mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" /> Renew soon — you'll move to Free when this period ends.
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-4 bg-gradient-card border-border/60">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2">Payment status</p>
+            {pendingPayment ? (
+              <div className="flex items-start gap-2">
+                <Clock className="h-5 w-5 text-secondary-foreground shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm">Awaiting verification</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pendingPayment.currency} {Number(pendingPayment.amount).toFixed(2)} · ref{" "}
+                    <span className="font-mono">{pendingPayment.external_reference}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Submitted {new Date(pendingPayment.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+            ) : payments[0]?.status === "successful" ? (
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Payment approved</p>
+                  <p className="text-xs text-muted-foreground">Your {payments[0].tier} plan is active.</p>
+                </div>
+              </div>
+            ) : lastFailed ? (
+              <div className="flex items-start gap-2">
+                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Last payment rejected</p>
+                  <p className="text-xs text-muted-foreground">Need help? Use the chat in the bottom right.</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No payments yet.</p>
+            )}
+          </Card>
         </div>
 
         {loading ? (

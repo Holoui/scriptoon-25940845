@@ -220,6 +220,77 @@ export type Database = {
         }
         Relationships: []
       }
+      support_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          sender_id: string
+          sender_role: string
+          thread_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          sender_id: string
+          sender_role: string
+          thread_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+          sender_role?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_threads: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string
+          status: string
+          subject: string
+          unread_for_admin: boolean
+          unread_for_user: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          status?: string
+          subject?: string
+          unread_for_admin?: boolean
+          unread_for_user?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          status?: string
+          subject?: string
+          unread_for_admin?: boolean
+          unread_for_user?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -246,6 +317,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      expire_subscriptions: {
+        Args: never
+        Returns: {
+          expired_user_id: string
+          previous_tier: Database["public"]["Enums"]["subscription_tier"]
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
