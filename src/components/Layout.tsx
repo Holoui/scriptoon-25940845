@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield } from "lucide-react";
+import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SupportChat } from "@/components/SupportChat";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -30,6 +30,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const navItems = [
     { to: "/", label: "Home", icon: Sparkles },
+    { to: "/community", label: "Community", icon: Users },
     { to: "/pricing", label: "Pricing", icon: Crown },
     { to: "/about", label: "About", icon: Info },
     { to: "/contact", label: "Contact", icon: Mail },
