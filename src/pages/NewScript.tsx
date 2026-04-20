@@ -27,6 +27,8 @@ const NewScript = () => {
   const limits = PLAN_LIMITS[t];
   const [loading, setLoading] = useState(false);
   const [usedToday, setUsedToday] = useState<number>(0);
+  const [retryAt, setRetryAt] = useState<Date | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const wordChoices = useMemo(() => wordOptionsForTier(t), [t]);
   const defaultWords = useMemo(() => Math.min(6000, limits.words), [limits.words]);
@@ -48,24 +50,47 @@ const NewScript = () => {
   const actOptions = useMemo(() => range(limits.acts), [limits.acts]);
   const episodeOptions = useMemo(() => range(limits.episodes), [limits.episodes]);
 
-  // Load today's generation count
+  // Load rolling 24-hour generation count
   useEffect(() => {
     (async () => {
       if (!user) return;
-      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { count } = await supabase
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const { data } = await supabase
         .from("script_generations")
-        .select("id", { count: "exact", head: true })
+        .select("created_at")
         .eq("user_id", user.id)
-        .gte("created_at", dayStart.toISOString());
-      setUsedToday(count ?? 0);
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: true });
+      const used = data?.length ?? 0;
+      setUsedToday(used);
+      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && data?.[0]) {
+        setRetryAt(new Date(new Date(data[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      }
     })();
-  }, [user]);
+  }, [user, limits.dailyGenerations]);
+
+  // Tick every second when locked out so countdown updates
+  useEffect(() => {
+    if (!retryAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [retryAt]);
 
   const dailyLimit = limits.dailyGenerations;
   const unlimited = !isFinite(dailyLimit);
   const remaining = unlimited ? Infinity : Math.max(0, dailyLimit - usedToday);
-  const blocked = !unlimited && remaining <= 0;
+  const cooldownMs = retryAt ? Math.max(0, retryAt.getTime() - now) : 0;
+  const blocked = !unlimited && (remaining <= 0 || cooldownMs > 0);
+
+  const formatCooldown = (ms: number) => {
+    const totalSec = Math.ceil(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
