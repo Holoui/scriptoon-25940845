@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -34,24 +34,71 @@ interface Payment {
   created_at: string;
 }
 
+const isTransientAuthAbort = (message?: string) =>
+  !!message && (message.includes("Lock broken by another request") || message.includes("AbortError"));
+
 const Dashboard = () => {
   const { user, tier, periodEnd } = useAuth();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const t: Tier = (tier ?? "free") as Tier;
   const limits = PLAN_LIMITS[t];
 
-  const load = async () => {
-    if (!user) return;
-    setLoading(true);
-    const [scriptsRes, paymentsRes] = await Promise.all([
-      supabase.from("scripts").select("id, title, logline, genre, status, updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }),
-      supabase.from("payments").select("id, tier, amount, currency, status, external_reference, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
-    ]);
-    if (scriptsRes.error) toast({ title: "Failed to load scripts", description: scriptsRes.error.message, variant: "destructive" });
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const load = async (attempt = 0) => {
+    if (!user) {
+      if (mountedRef.current) {
+        setScripts([]);
+        setPayments([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mountedRef.current) setLoading(true);
+
+    const scriptsRes = await supabase
+      .from("scripts")
+      .select("id, title, logline, genre, status, updated_at")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    const paymentsRes = await supabase
+      .from("payments")
+      .select("id, tier, amount, currency, status, external_reference, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const shouldRetry = attempt === 0 && [scriptsRes.error?.message, paymentsRes.error?.message].some(isTransientAuthAbort);
+
+    if (shouldRetry) {
+      window.setTimeout(() => {
+        if (mountedRef.current) void load(1);
+      }, 250);
+      return;
+    }
+
+    if (!mountedRef.current) return;
+
+    if (scriptsRes.error) {
+      toast({ title: "Failed to load scripts", description: scriptsRes.error.message, variant: "destructive" });
+    }
+
+    if (paymentsRes.error && !isTransientAuthAbort(paymentsRes.error.message)) {
+      toast({ title: "Failed to load payments", description: paymentsRes.error.message, variant: "destructive" });
+    }
+
     setScripts((scriptsRes.data as Script[]) ?? []);
     setPayments((paymentsRes.data as Payment[]) ?? []);
     setLoading(false);
