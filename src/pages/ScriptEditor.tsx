@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target, Lock, Share2 } from "lucide-react";
 import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
@@ -32,7 +32,9 @@ interface Version { id: string; version_number: number; created_at: string; cont
 const ScriptEditor = () => {
   const { id } = useParams();
   const { user, tier } = useAuth();
-  const limits = PLAN_LIMITS[(tier ?? "free") as Tier];
+  const t: Tier = (tier ?? "free") as Tier;
+  const limits = PLAN_LIMITS[t];
+  const canExtend = t !== "free";
   const [script, setScript] = useState<Script | null>(null);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -44,6 +46,8 @@ const ScriptEditor = () => {
   const [versions, setVersions] = useState<Version[]>([]);
   const [extending, setExtending] = useState(false);
   const [autoExtend, setAutoExtend] = useState(false);
+  const [planCapped, setPlanCapped] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const autoCancelRef = useRef(false);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -126,10 +130,9 @@ const ScriptEditor = () => {
     exportScreenplayPDF({ title: title || "Untitled", content });
   };
 
-  const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number } | null> => {
+  const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number; capped?: boolean; message?: string } | null> => {
     if (!script) return null;
     const target = script.target_words ?? Math.min(6000, limits.words);
-    // Persist any pending edits before asking AI to continue
     if (dirtyRef.current) await save(false);
     const { data, error } = await supabase.functions.invoke("extend-script", {
       body: { script_id: script.id, target_words: target },
@@ -141,26 +144,42 @@ const ScriptEditor = () => {
       dirtyRef.current = false;
       setSavedAt(new Date());
     }
-    return { done: !!data?.done, added: data?.added ?? 0, words: data?.words ?? 0, target: data?.target ?? target };
+    if (data?.plan_capped) setPlanCapped(true);
+    return {
+      done: !!data?.done,
+      added: data?.added ?? 0,
+      words: data?.words ?? 0,
+      target: data?.target ?? target,
+      capped: !!data?.capped,
+      message: data?.message,
+    };
   };
 
   const handleExtend = async () => {
     if (!script || extending) return;
+    if (!canExtend) {
+      toast({ title: "Extend is a Pro feature", description: "Upgrade to Pro or Premium to keep growing your screenplay.", variant: "destructive" });
+      return;
+    }
     setExtending(true);
     autoCancelRef.current = false;
     try {
       if (!autoExtend) {
         const r = await extendOnce();
-        if (r) toast({ title: `Added ~${r.added} words`, description: `${r.words} / ${r.target} words` });
+        if (r?.capped) toast({ title: "Plan limit reached", description: r.message ?? "You've hit your plan ceiling.", variant: "destructive" });
+        else if (r) toast({ title: `Added ~${r.added} words`, description: `${r.words} / ${r.target} words` });
         return;
       }
-      // Auto-extend: keep calling until target reached, AI stalls, or user cancels
       let lastWords = countWords(content);
       let iterations = 0;
       while (iterations < 10) {
         if (autoCancelRef.current) break;
         const r = await extendOnce();
         if (!r) break;
+        if (r.capped) {
+          toast({ title: "Plan limit reached", description: r.message ?? "You've hit your plan ceiling.", variant: "destructive" });
+          break;
+        }
         if (r.done) {
           toast({ title: "Target reached", description: `${r.words} / ${r.target} words` });
           break;
@@ -173,10 +192,43 @@ const ScriptEditor = () => {
         iterations++;
       }
     } catch (err: any) {
-      toast({ title: "Couldn't extend script", description: err?.message ?? "Extension failed", variant: "destructive" });
+      const msg = err?.message ?? "Extension failed";
+      if (msg.toLowerCase().includes("pro and premium") || msg.toLowerCase().includes("upgrade")) {
+        toast({ title: "Upgrade required", description: msg, variant: "destructive" });
+      } else {
+        toast({ title: "Couldn't extend script", description: msg, variant: "destructive" });
+      }
     } finally {
       setExtending(false);
       autoCancelRef.current = false;
+    }
+  };
+
+  const publishToCommunity = async () => {
+    if (!script || !user) return;
+    if (!content.trim()) {
+      toast({ title: "Nothing to publish yet", variant: "destructive" });
+      return;
+    }
+    setPublishing(true);
+    try {
+      const authorName = user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Anonymous";
+      const excerpt = (synopsis || content).slice(0, 280);
+      const { error } = await supabase.from("community_posts").insert({
+        user_id: user.id,
+        script_id: script.id,
+        title: title || "Untitled",
+        excerpt,
+        body: content,
+        genre: script.genre,
+        author_name: authorName,
+      });
+      if (error) throw error;
+      toast({ title: "Published to community! 🎉", description: "Readers can now like and comment on your script." });
+    } catch (err: any) {
+      toast({ title: "Couldn't publish", description: err?.message ?? "Try again", variant: "destructive" });
+    } finally {
+      setPublishing(false);
     }
   };
 
