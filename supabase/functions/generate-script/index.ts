@@ -80,18 +80,28 @@ Deno.serve(async (req) => {
     const tier: Tier = ((sub?.tier as Tier) ?? "free");
     const limits = LIMITS[tier];
 
-    // Daily generation rate-limit (UTC day window)
-    const dayStart = new Date();
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const { count: usedToday } = await admin
-      .from("script_generations")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", dayStart.toISOString());
-    if ((usedToday ?? 0) >= limits.dailyGenerations) {
-      return new Response(JSON.stringify({
-        error: `Daily limit reached. Your ${tier} plan allows ${limits.dailyGenerations} script(s) per day. Upgrade for more.`,
-      }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Daily generation rate-limit — rolling 24h window. Premium has no cap.
+    if (limits.dailyGenerations !== Number.MAX_SAFE_INTEGER) {
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const { data: recent } = await admin
+        .from("script_generations")
+        .select("created_at")
+        .eq("user_id", userId)
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: true });
+      const usedInWindow = recent?.length ?? 0;
+      if (usedInWindow >= limits.dailyGenerations) {
+        // Cooldown ends 24h after the OLDEST generation in the current window
+        const oldest = recent?.[0]?.created_at ?? new Date().toISOString();
+        const retryAt = new Date(new Date(oldest).getTime() + 24 * 60 * 60 * 1000).toISOString();
+        return new Response(JSON.stringify({
+          error: `You've used all ${limits.dailyGenerations} script generation${limits.dailyGenerations === 1 ? "" : "s"} for your ${tier} plan in the last 24 hours. Try again later or upgrade for more.`,
+          rate_limited: true,
+          retry_at: retryAt,
+          used: usedInWindow,
+          limit: limits.dailyGenerations,
+        }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     // Clamp inputs to plan limits

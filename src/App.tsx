@@ -13,6 +13,7 @@ import ScriptEditor from "./pages/ScriptEditor";
 import Pricing from "./pages/Pricing";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import Community from "./pages/Community";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/community" element={<Community />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/new" element={<ProtectedRoute><NewScript /></ProtectedRoute>} />
             <Route path="/dashboard/scripts/:id" element={<ProtectedRoute><ScriptEditor /></ProtectedRoute>} />

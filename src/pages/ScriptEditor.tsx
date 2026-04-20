@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target } from "lucide-react";
+import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target, Lock, Share2 } from "lucide-react";
 import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
@@ -32,7 +32,9 @@ interface Version { id: string; version_number: number; created_at: string; cont
 const ScriptEditor = () => {
   const { id } = useParams();
   const { user, tier } = useAuth();
-  const limits = PLAN_LIMITS[(tier ?? "free") as Tier];
+  const t: Tier = (tier ?? "free") as Tier;
+  const limits = PLAN_LIMITS[t];
+  const canExtend = t !== "free";
   const [script, setScript] = useState<Script | null>(null);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -44,6 +46,8 @@ const ScriptEditor = () => {
   const [versions, setVersions] = useState<Version[]>([]);
   const [extending, setExtending] = useState(false);
   const [autoExtend, setAutoExtend] = useState(false);
+  const [planCapped, setPlanCapped] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const autoCancelRef = useRef(false);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -126,10 +130,9 @@ const ScriptEditor = () => {
     exportScreenplayPDF({ title: title || "Untitled", content });
   };
 
-  const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number } | null> => {
+  const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number; capped?: boolean; message?: string } | null> => {
     if (!script) return null;
     const target = script.target_words ?? Math.min(6000, limits.words);
-    // Persist any pending edits before asking AI to continue
     if (dirtyRef.current) await save(false);
     const { data, error } = await supabase.functions.invoke("extend-script", {
       body: { script_id: script.id, target_words: target },
@@ -141,26 +144,42 @@ const ScriptEditor = () => {
       dirtyRef.current = false;
       setSavedAt(new Date());
     }
-    return { done: !!data?.done, added: data?.added ?? 0, words: data?.words ?? 0, target: data?.target ?? target };
+    if (data?.plan_capped) setPlanCapped(true);
+    return {
+      done: !!data?.done,
+      added: data?.added ?? 0,
+      words: data?.words ?? 0,
+      target: data?.target ?? target,
+      capped: !!data?.capped,
+      message: data?.message,
+    };
   };
 
   const handleExtend = async () => {
     if (!script || extending) return;
+    if (!canExtend) {
+      toast({ title: "Extend is a Pro feature", description: "Upgrade to Pro or Premium to keep growing your screenplay.", variant: "destructive" });
+      return;
+    }
     setExtending(true);
     autoCancelRef.current = false;
     try {
       if (!autoExtend) {
         const r = await extendOnce();
-        if (r) toast({ title: `Added ~${r.added} words`, description: `${r.words} / ${r.target} words` });
+        if (r?.capped) toast({ title: "Plan limit reached", description: r.message ?? "You've hit your plan ceiling.", variant: "destructive" });
+        else if (r) toast({ title: `Added ~${r.added} words`, description: `${r.words} / ${r.target} words` });
         return;
       }
-      // Auto-extend: keep calling until target reached, AI stalls, or user cancels
       let lastWords = countWords(content);
       let iterations = 0;
       while (iterations < 10) {
         if (autoCancelRef.current) break;
         const r = await extendOnce();
         if (!r) break;
+        if (r.capped) {
+          toast({ title: "Plan limit reached", description: r.message ?? "You've hit your plan ceiling.", variant: "destructive" });
+          break;
+        }
         if (r.done) {
           toast({ title: "Target reached", description: `${r.words} / ${r.target} words` });
           break;
@@ -173,10 +192,43 @@ const ScriptEditor = () => {
         iterations++;
       }
     } catch (err: any) {
-      toast({ title: "Couldn't extend script", description: err?.message ?? "Extension failed", variant: "destructive" });
+      const msg = err?.message ?? "Extension failed";
+      if (msg.toLowerCase().includes("pro and premium") || msg.toLowerCase().includes("upgrade")) {
+        toast({ title: "Upgrade required", description: msg, variant: "destructive" });
+      } else {
+        toast({ title: "Couldn't extend script", description: msg, variant: "destructive" });
+      }
     } finally {
       setExtending(false);
       autoCancelRef.current = false;
+    }
+  };
+
+  const publishToCommunity = async () => {
+    if (!script || !user) return;
+    if (!content.trim()) {
+      toast({ title: "Nothing to publish yet", variant: "destructive" });
+      return;
+    }
+    setPublishing(true);
+    try {
+      const authorName = user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Anonymous";
+      const excerpt = (synopsis || content).slice(0, 280);
+      const { error } = await supabase.from("community_posts").insert({
+        user_id: user.id,
+        script_id: script.id,
+        title: title || "Untitled",
+        excerpt,
+        body: content,
+        genre: script.genre,
+        author_name: authorName,
+      });
+      if (error) throw error;
+      toast({ title: "Published to community! 🎉", description: "Readers can now like and comment on your script." });
+    } catch (err: any) {
+      toast({ title: "Couldn't publish", description: err?.message ?? "Try again", variant: "destructive" });
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -240,6 +292,9 @@ const ScriptEditor = () => {
                 </div>
               </SheetContent>
             </Sheet>
+            <Button size="sm" variant="outline" onClick={publishToCommunity} disabled={publishing}>
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Share2 className="mr-2 h-4 w-4" /> Publish</>}
+            </Button>
             <Button size="sm" onClick={handleExport} className="bg-gradient-hero text-white border-0 hover:opacity-90">
               <Download className="mr-2 h-4 w-4" /> Export PDF
             </Button>
@@ -294,36 +349,58 @@ const ScriptEditor = () => {
                   />
                   <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
                     <p className="text-muted-foreground">
-                      {reachedTarget
+                      {planCapped
+                        ? `🛑 You've hit your ${limits.label} plan ceiling (~${limits.words.toLocaleString()} words / ${limits.pages} pages).`
+                        : reachedTarget
                         ? "🎯 Target reached — you can keep extending or polish what's there."
                         : `${shortfall.toLocaleString()} words to go to hit your target.`}
                     </p>
                     <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="accent-primary"
-                          checked={autoExtend}
-                          onChange={(e) => setAutoExtend(e.target.checked)}
-                          disabled={extending}
-                        />
-                        Auto until target
-                      </label>
-                      <Button
-                        size="sm"
-                        onClick={handleExtend}
-                        disabled={extending || overPlan}
-                        className="bg-gradient-hero text-white border-0 hover:opacity-90"
-                      >
-                        {extending ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
-                        ) : (
-                          <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
-                        )}
-                      </Button>
+                      {canExtend && (
+                        <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="accent-primary"
+                            checked={autoExtend}
+                            onChange={(e) => setAutoExtend(e.target.checked)}
+                            disabled={extending}
+                          />
+                          Auto until target
+                        </label>
+                      )}
+                      {canExtend ? (
+                        <Button
+                          size="sm"
+                          onClick={handleExtend}
+                          disabled={extending || overPlan || planCapped}
+                          className="bg-gradient-hero text-white border-0 hover:opacity-90"
+                        >
+                          {extending ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
+                          ) : (
+                            <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to="/pricing"><Lock className="mr-2 h-4 w-4" /> Extend (Pro)</Link>
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {overPlan && (
+                  {!canExtend && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Lock className="h-3 w-3" />
+                      Continue / Extend is available on the Pro and Premium plans.
+                    </p>
+                  )}
+                  {planCapped && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Plan ceiling reached. {t === "premium" ? "Start a new script to keep writing." : <>Upgrade your plan to extend further. <Link to="/pricing" className="underline ml-1">See plans</Link></>}
+                    </p>
+                  )}
+                  {overPlan && !planCapped && (
                     <p className="text-xs text-destructive flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
                       You're over your {limits.label} plan limit. Upgrade to extend further.

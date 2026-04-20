@@ -27,6 +27,8 @@ const NewScript = () => {
   const limits = PLAN_LIMITS[t];
   const [loading, setLoading] = useState(false);
   const [usedToday, setUsedToday] = useState<number>(0);
+  const [retryAt, setRetryAt] = useState<Date | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const wordChoices = useMemo(() => wordOptionsForTier(t), [t]);
   const defaultWords = useMemo(() => Math.min(6000, limits.words), [limits.words]);
@@ -48,24 +50,47 @@ const NewScript = () => {
   const actOptions = useMemo(() => range(limits.acts), [limits.acts]);
   const episodeOptions = useMemo(() => range(limits.episodes), [limits.episodes]);
 
-  // Load today's generation count
+  // Load rolling 24-hour generation count
   useEffect(() => {
     (async () => {
       if (!user) return;
-      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { count } = await supabase
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const { data } = await supabase
         .from("script_generations")
-        .select("id", { count: "exact", head: true })
+        .select("created_at")
         .eq("user_id", user.id)
-        .gte("created_at", dayStart.toISOString());
-      setUsedToday(count ?? 0);
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: true });
+      const used = data?.length ?? 0;
+      setUsedToday(used);
+      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && data?.[0]) {
+        setRetryAt(new Date(new Date(data[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      }
     })();
-  }, [user]);
+  }, [user, limits.dailyGenerations]);
+
+  // Tick every second when locked out so countdown updates
+  useEffect(() => {
+    if (!retryAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [retryAt]);
 
   const dailyLimit = limits.dailyGenerations;
   const unlimited = !isFinite(dailyLimit);
   const remaining = unlimited ? Infinity : Math.max(0, dailyLimit - usedToday);
-  const blocked = !unlimited && remaining <= 0;
+  const cooldownMs = retryAt ? Math.max(0, retryAt.getTime() - now) : 0;
+  const blocked = !unlimited && (remaining <= 0 || cooldownMs > 0);
+
+  const formatCooldown = (ms: number) => {
+    const totalSec = Math.ceil(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +100,10 @@ const NewScript = () => {
       return;
     }
     if (blocked) {
-      toast({ title: "Daily limit reached", description: `Your ${t} plan allows ${dailyLimit} script(s) per day. Upgrade for more.`, variant: "destructive" });
+      const desc = cooldownMs > 0
+        ? `You've used all ${dailyLimit} of your daily generations. Try again in ${formatCooldown(cooldownMs)} or upgrade your plan.`
+        : `Your ${t} plan allows ${dailyLimit} script(s) every 24 hours. Upgrade for more.`;
+      toast({ title: "Daily limit reached", description: desc, variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -92,7 +120,13 @@ const NewScript = () => {
       };
       const { data, error } = await supabase.functions.invoke("generate-script", { body: payload });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        if (data.rate_limited && data.retry_at) {
+          setRetryAt(new Date(data.retry_at));
+          setUsedToday(data.used ?? usedToday);
+        }
+        throw new Error(data.error);
+      }
       toast({ title: "Script ready!", description: data.title });
       navigate(`/dashboard/scripts/${data.id}`);
     } catch (err: any) {
@@ -117,7 +151,11 @@ const NewScript = () => {
                 {t} plan · up to {fmtNum(limits.words)} words · {limits.acts} acts{limits.allowSeries ? ` · ${limits.episodes} episodes` : ""}
               </Badge>
               <Badge variant={blocked ? "destructive" : "outline"}>
-                {unlimited ? "Unlimited today" : `${remaining}/${dailyLimit} left today`}
+                {unlimited
+                  ? "Unlimited generations"
+                  : cooldownMs > 0
+                  ? `Locked · retry in ${formatCooldown(cooldownMs)}`
+                  : `${remaining}/${dailyLimit} left in next 24h`}
               </Badge>
             </div>
           </div>
@@ -229,9 +267,24 @@ const NewScript = () => {
               </div>
 
               {blocked && (
-                <p className="text-sm text-destructive text-center">
-                  You've used all {dailyLimit} of today's generations. Resets at midnight or upgrade for more.
-                </p>
+                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-center space-y-1">
+                  <p className="text-sm font-semibold text-destructive flex items-center justify-center gap-2">
+                    <Lock className="h-4 w-4" /> Daily limit reached
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    You've used all {dailyLimit} of your {t} plan's generations in the last 24 hours.
+                  </p>
+                  {cooldownMs > 0 ? (
+                    <p className="text-xs">
+                      Try again in <span className="font-mono font-semibold text-foreground">{formatCooldown(cooldownMs)}</span>{" "}
+                      or <a href="/pricing" className="text-primary underline">upgrade your plan</a> for more.
+                    </p>
+                  ) : (
+                    <p className="text-xs">
+                      <a href="/pricing" className="text-primary underline">Upgrade your plan</a> to keep generating.
+                    </p>
+                  )}
+                </div>
               )}
 
               <Button type="submit" className="w-full bg-gradient-hero text-white border-0 hover:opacity-90 h-12 text-base shadow-playful" disabled={loading || blocked}>
