@@ -292,6 +292,9 @@ const ScriptEditor = () => {
                 </div>
               </SheetContent>
             </Sheet>
+            <Button size="sm" variant="outline" onClick={publishToCommunity} disabled={publishing}>
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Share2 className="mr-2 h-4 w-4" /> Publish</>}
+            </Button>
             <Button size="sm" onClick={handleExport} className="bg-gradient-hero text-white border-0 hover:opacity-90">
               <Download className="mr-2 h-4 w-4" /> Export PDF
             </Button>
@@ -346,36 +349,58 @@ const ScriptEditor = () => {
                   />
                   <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
                     <p className="text-muted-foreground">
-                      {reachedTarget
+                      {planCapped
+                        ? `🛑 You've hit your ${limits.label} plan ceiling (~${limits.words.toLocaleString()} words / ${limits.pages} pages).`
+                        : reachedTarget
                         ? "🎯 Target reached — you can keep extending or polish what's there."
                         : `${shortfall.toLocaleString()} words to go to hit your target.`}
                     </p>
                     <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="accent-primary"
-                          checked={autoExtend}
-                          onChange={(e) => setAutoExtend(e.target.checked)}
-                          disabled={extending}
-                        />
-                        Auto until target
-                      </label>
-                      <Button
-                        size="sm"
-                        onClick={handleExtend}
-                        disabled={extending || overPlan}
-                        className="bg-gradient-hero text-white border-0 hover:opacity-90"
-                      >
-                        {extending ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
-                        ) : (
-                          <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
-                        )}
-                      </Button>
+                      {canExtend && (
+                        <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="accent-primary"
+                            checked={autoExtend}
+                            onChange={(e) => setAutoExtend(e.target.checked)}
+                            disabled={extending}
+                          />
+                          Auto until target
+                        </label>
+                      )}
+                      {canExtend ? (
+                        <Button
+                          size="sm"
+                          onClick={handleExtend}
+                          disabled={extending || overPlan || planCapped}
+                          className="bg-gradient-hero text-white border-0 hover:opacity-90"
+                        >
+                          {extending ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
+                          ) : (
+                            <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to="/pricing"><Lock className="mr-2 h-4 w-4" /> Extend (Pro)</Link>
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {overPlan && (
+                  {!canExtend && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Lock className="h-3 w-3" />
+                      Continue / Extend is available on the Pro and Premium plans.
+                    </p>
+                  )}
+                  {planCapped && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Plan ceiling reached. {t === "premium" ? "Start a new script to keep writing." : <>Upgrade your plan to extend further. <Link to="/pricing" className="underline ml-1">See plans</Link></>}
+                    </p>
+                  )}
+                  {overPlan && !planCapped && (
                     <p className="text-xs text-destructive flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
                       You're over your {limits.label} plan limit. Upgrade to extend further.
