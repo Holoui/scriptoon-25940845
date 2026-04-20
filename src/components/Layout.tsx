@@ -8,7 +8,7 @@ import { SupportChat } from "@/components/SupportChat";
 import { NotificationBell } from "@/components/NotificationBell";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
-  const { user, role, signOut } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [open, setOpen] = useState(false);
@@ -74,7 +74,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </nav>
 
           <div className="flex items-center gap-2">
-            {user && <NotificationBell />}
+            {user && !loading && <NotificationBell />}
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
@@ -131,7 +131,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
       <main className="flex-1">{children}</main>
 
-      {user && role !== "admin" && <SupportChat />}
+      {user && !loading && role !== "admin" && <SupportChat />}
 
       <footer className="border-t border-border/60 mt-12">
         <div className="container py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">

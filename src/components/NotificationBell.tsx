@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Bell, Check, Trash2 } from "lucide-react";
 
+const isTransientAuthAbort = (message?: string) =>
+  !!message && (message.includes("Lock broken by another request") || message.includes("AbortError"));
+
 interface Notif {
   id: string;
   kind: string;
@@ -19,14 +22,18 @@ export const NotificationBell = () => {
   const [items, setItems] = useState<Notif[]>([]);
   const [open, setOpen] = useState(false);
 
-  const load = async () => {
+  const load = async (attempt = 0) => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notifications")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
+    if (error && attempt === 0 && isTransientAuthAbort(error.message)) {
+      window.setTimeout(() => void load(1), 250);
+      return;
+    }
     setItems((data as Notif[]) ?? []);
   };
 

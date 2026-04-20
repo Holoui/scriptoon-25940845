@@ -30,6 +30,8 @@ interface Msg {
 }
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const isTransientAuthAbort = (message?: string) =>
+  !!message && (message.includes("Lock broken by another request") || message.includes("AbortError"));
 
 export const SupportChat = () => {
   const { user } = useAuth();
@@ -44,13 +46,17 @@ export const SupportChat = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const loadThreads = async () => {
+  const loadThreads = async (attempt = 0) => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("support_threads")
       .select("id, subject, status, last_message_at, unread_for_user")
       .eq("user_id", user.id)
       .order("last_message_at", { ascending: false });
+    if (error && attempt === 0 && isTransientAuthAbort(error.message)) {
+      window.setTimeout(() => void loadThreads(1), 250);
+      return;
+    }
     const list = (data as Thread[]) ?? [];
     setThreads(list);
     setUnread(list.filter((t) => t.unread_for_user).length);
