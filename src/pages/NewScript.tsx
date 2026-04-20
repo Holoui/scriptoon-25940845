@@ -267,9 +267,24 @@ const NewScript = () => {
               </div>
 
               {blocked && (
-                <p className="text-sm text-destructive text-center">
-                  You've used all {dailyLimit} of today's generations. Resets at midnight or upgrade for more.
-                </p>
+                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-center space-y-1">
+                  <p className="text-sm font-semibold text-destructive flex items-center justify-center gap-2">
+                    <Lock className="h-4 w-4" /> Daily limit reached
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    You've used all {dailyLimit} of your {t} plan's generations in the last 24 hours.
+                  </p>
+                  {cooldownMs > 0 ? (
+                    <p className="text-xs">
+                      Try again in <span className="font-mono font-semibold text-foreground">{formatCooldown(cooldownMs)}</span>{" "}
+                      or <a href="/pricing" className="text-primary underline">upgrade your plan</a> for more.
+                    </p>
+                  ) : (
+                    <p className="text-xs">
+                      <a href="/pricing" className="text-primary underline">Upgrade your plan</a> to keep generating.
+                    </p>
+                  )}
+                </div>
               )}
 
               <Button type="submit" className="w-full bg-gradient-hero text-white border-0 hover:opacity-90 h-12 text-base shadow-playful" disabled={loading || blocked}>
