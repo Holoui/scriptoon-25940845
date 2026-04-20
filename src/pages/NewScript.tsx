@@ -100,7 +100,10 @@ const NewScript = () => {
       return;
     }
     if (blocked) {
-      toast({ title: "Daily limit reached", description: `Your ${t} plan allows ${dailyLimit} script(s) per day. Upgrade for more.`, variant: "destructive" });
+      const desc = cooldownMs > 0
+        ? `You've used all ${dailyLimit} of your daily generations. Try again in ${formatCooldown(cooldownMs)} or upgrade your plan.`
+        : `Your ${t} plan allows ${dailyLimit} script(s) every 24 hours. Upgrade for more.`;
+      toast({ title: "Daily limit reached", description: desc, variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -117,7 +120,13 @@ const NewScript = () => {
       };
       const { data, error } = await supabase.functions.invoke("generate-script", { body: payload });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        if (data.rate_limited && data.retry_at) {
+          setRetryAt(new Date(data.retry_at));
+          setUsedToday(data.used ?? usedToday);
+        }
+        throw new Error(data.error);
+      }
       toast({ title: "Script ready!", description: data.title });
       navigate(`/dashboard/scripts/${data.id}`);
     } catch (err: any) {
@@ -142,7 +151,11 @@ const NewScript = () => {
                 {t} plan · up to {fmtNum(limits.words)} words · {limits.acts} acts{limits.allowSeries ? ` · ${limits.episodes} episodes` : ""}
               </Badge>
               <Badge variant={blocked ? "destructive" : "outline"}>
-                {unlimited ? "Unlimited today" : `${remaining}/${dailyLimit} left today`}
+                {unlimited
+                  ? "Unlimited generations"
+                  : cooldownMs > 0
+                  ? `Locked · retry in ${formatCooldown(cooldownMs)}`
+                  : `${remaining}/${dailyLimit} left in next 24h`}
               </Badge>
             </div>
           </div>
