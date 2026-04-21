@@ -33,17 +33,19 @@ const Admin = () => {
   const [subs, setSubs] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [unreadChats, setUnreadChats] = useState(0);
+  const [openReports, setOpenReports] = useState(0);
 
   const profileFor = (uid: string) => profiles.find((p) => p.id === uid);
 
   const load = async () => {
-    const [p, s, pay, sub, msgs, threads] = await Promise.all([
+    const [p, s, pay, sub, msgs, threads, reps] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("scripts").select("id, title, genre, status, user_id, updated_at").order("updated_at", { ascending: false }),
       supabase.from("payments").select("*").order("created_at", { ascending: false }),
       supabase.from("subscriptions").select("*"),
       supabase.from("contact_messages").select("*").order("created_at", { ascending: false }),
       supabase.from("support_threads").select("unread_for_admin").eq("unread_for_admin", true),
+      supabase.from("user_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     ]);
     setProfiles(p.data ?? []);
     setScripts(s.data ?? []);
@@ -51,6 +53,7 @@ const Admin = () => {
     setSubs(sub.data ?? []);
     setContacts(msgs.data ?? []);
     setUnreadChats(threads.data?.length ?? 0);
+    setOpenReports(reps.count ?? 0);
     setLoading(false);
   };
 
