@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle } from "lucide-react";
+import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle, Flag } from "lucide-react";
 import { AdminChatPanel } from "@/components/AdminChatPanel";
 import { GrantPlanDialog } from "@/components/admin/GrantPlanDialog";
+import { ReportsPanel } from "@/components/admin/ReportsPanel";
 
 type Payment = {
   id: string;
@@ -32,17 +33,19 @@ const Admin = () => {
   const [subs, setSubs] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [unreadChats, setUnreadChats] = useState(0);
+  const [openReports, setOpenReports] = useState(0);
 
   const profileFor = (uid: string) => profiles.find((p) => p.id === uid);
 
   const load = async () => {
-    const [p, s, pay, sub, msgs, threads] = await Promise.all([
+    const [p, s, pay, sub, msgs, threads, reps] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("scripts").select("id, title, genre, status, user_id, updated_at").order("updated_at", { ascending: false }),
       supabase.from("payments").select("*").order("created_at", { ascending: false }),
       supabase.from("subscriptions").select("*"),
       supabase.from("contact_messages").select("*").order("created_at", { ascending: false }),
       supabase.from("support_threads").select("unread_for_admin").eq("unread_for_admin", true),
+      supabase.from("user_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     ]);
     setProfiles(p.data ?? []);
     setScripts(s.data ?? []);
@@ -50,6 +53,7 @@ const Admin = () => {
     setSubs(sub.data ?? []);
     setContacts(msgs.data ?? []);
     setUnreadChats(threads.data?.length ?? 0);
+    setOpenReports(reps.count ?? 0);
     setLoading(false);
   };
 
@@ -165,6 +169,10 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="messages">
               <Mail className="h-4 w-4 mr-1" /> Contact ({contacts.length})
+            </TabsTrigger>
+            <TabsTrigger value="reports">
+              <Flag className="h-4 w-4 mr-1" /> Reports
+              {openReports > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{openReports}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
@@ -349,6 +357,10 @@ const Admin = () => {
                 </TableBody>
               </Table>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportsPanel />
           </TabsContent>
         </Tabs>
       </div>

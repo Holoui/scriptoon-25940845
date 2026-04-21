@@ -15,6 +15,9 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Community from "./pages/Community";
 import Admin from "./pages/Admin";
+import Profile from "./pages/Profile";
+import Marketplace from "./pages/Marketplace";
+import ListingDetail from "./pages/ListingDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +36,9 @@ const App = () => (
             <Route path="/contact" element={<Contact />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/community" element={<Community />} />
+            <Route path="/marketplace" element={<Marketplace />} />
+            <Route path="/marketplace/:id" element={<ListingDetail />} />
+            <Route path="/u/:userId" element={<Profile />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/new" element={<ProtectedRoute><NewScript /></ProtectedRoute>} />
             <Route path="/dashboard/scripts/:id" element={<ProtectedRoute><ScriptEditor /></ProtectedRoute>} />
