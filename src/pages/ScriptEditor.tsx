@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target, Lock, Share2 } from "lucide-react";
 import { ExportDialog } from "@/components/ExportDialog";
+import { CreateListingDialog } from "@/components/CreateListingDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
 
@@ -49,6 +50,7 @@ const ScriptEditor = () => {
   const [planCapped, setPlanCapped] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [listingOpen, setListingOpen] = useState(false);
   const autoCancelRef = useRef(false);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -296,6 +298,11 @@ const ScriptEditor = () => {
             <Button size="sm" variant="outline" onClick={publishToCommunity} disabled={publishing}>
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Share2 className="mr-2 h-4 w-4" /> Publish</>}
             </Button>
+            {(t === "pro" || t === "premium") && (
+              <Button size="sm" variant="outline" onClick={() => setListingOpen(true)}>
+                <Target className="mr-2 h-4 w-4" /> Sell
+              </Button>
+            )}
             <Button size="sm" onClick={handleExport} className="bg-gradient-hero text-white border-0 hover:opacity-90">
               <Download className="mr-2 h-4 w-4" /> Export
             </Button>
@@ -418,6 +425,14 @@ const ScriptEditor = () => {
         onOpenChange={setExportOpen}
         title={title || "Untitled"}
         content={content}
+      />
+      <CreateListingDialog
+        open={listingOpen}
+        onOpenChange={setListingOpen}
+        scriptId={script.id}
+        defaultTitle={title || "Untitled"}
+        defaultGenre={script.genre}
+        defaultPreview={content}
       />
     </Layout>
   );
