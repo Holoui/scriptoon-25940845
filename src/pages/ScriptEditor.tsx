@@ -369,30 +369,24 @@ const ScriptEditor = () => {
                           Auto until target
                         </label>
                       )}
-                      {canExtend ? (
-                        <Button
-                          size="sm"
-                          onClick={handleExtend}
-                          disabled={extending || overPlan || planCapped}
-                          className="bg-gradient-hero text-white border-0 hover:opacity-90"
-                        >
-                          {extending ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
-                          ) : (
-                            <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button asChild size="sm" variant="outline">
-                          <Link to="/pricing"><Lock className="mr-2 h-4 w-4" /> Extend (Pro)</Link>
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        onClick={handleExtend}
+                        disabled={extending || overPlan || planCapped}
+                        className="bg-gradient-hero text-white border-0 hover:opacity-90"
+                      >
+                        {extending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
+                        ) : (
+                          <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                  {!canExtend && (
+                  {t === "free" && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Lock className="h-3 w-3" />
-                      Continue / Extend is available on the Pro and Premium plans.
+                      Free plan: 1 Extend every 24h. <Link to="/pricing" className="underline ml-1">Upgrade</Link> for unlimited.
                     </p>
                   )}
                   {planCapped && (
