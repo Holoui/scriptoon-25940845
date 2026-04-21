@@ -166,6 +166,10 @@ const Admin = () => {
             <TabsTrigger value="messages">
               <Mail className="h-4 w-4 mr-1" /> Contact ({contacts.length})
             </TabsTrigger>
+            <TabsTrigger value="reports">
+              <Flag className="h-4 w-4 mr-1" /> Reports
+              {openReports > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{openReports}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
           </TabsList>
@@ -349,6 +353,10 @@ const Admin = () => {
                 </TableBody>
               </Table>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportsPanel />
           </TabsContent>
         </Tabs>
       </div>

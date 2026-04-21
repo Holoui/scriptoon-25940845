@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Heart, MessageCircle, Share2, Loader2, Users, Send, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Loader2, Users, Send, Trash2, Flag } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { ReportUserDialog } from "@/components/ReportUserDialog";
 
 interface Post {
   id: string;
@@ -46,6 +47,7 @@ const Community = () => {
   const [commentText, setCommentText] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{ userId: string; name: string; postId: string } | null>(null);
 
   const loadFeed = async () => {
     setLoading(true);
@@ -189,21 +191,33 @@ const Community = () => {
               return (
                 <Card key={post.id} id={`post-${post.id}`} className="p-5 md:p-6 bg-gradient-card border-border/60 hover:shadow-soft transition-shadow">
                   <div className="flex items-start gap-3 mb-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">{initials(post.author_name)}</AvatarFallback>
-                    </Avatar>
+                    <Link to={`/u/${post.user_id}`}>
+                      <Avatar className="h-10 w-10 hover:ring-2 hover:ring-primary transition-all">
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">{initials(post.author_name)}</AvatarFallback>
+                      </Avatar>
+                    </Link>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold truncate">{post.author_name ?? "Anonymous"}</p>
+                        <Link to={`/u/${post.user_id}`} className="font-semibold truncate hover:text-primary">
+                          {post.author_name ?? "Anonymous"}
+                        </Link>
                         {post.genre && <Badge variant="secondary" className="text-xs">{post.genre}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString()}</p>
                     </div>
-                    {user?.id === post.user_id && (
-                      <Button size="icon" variant="ghost" onClick={() => deletePost(post)} aria-label="Unpublish">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {user && user.id !== post.user_id && (
+                        <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-destructive" aria-label="Report"
+                          onClick={() => setReportTarget({ userId: post.user_id, name: post.author_name ?? "User", postId: post.id })}>
+                          <Flag className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {user?.id === post.user_id && (
+                        <Button size="icon" variant="ghost" onClick={() => deletePost(post)} aria-label="Unpublish">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <h2 className="font-display text-2xl font-bold mb-2">{post.title}</h2>
@@ -285,6 +299,15 @@ const Community = () => {
             )}
           </SheetContent>
         </Sheet>
+        {reportTarget && (
+          <ReportUserDialog
+            open={!!reportTarget}
+            onOpenChange={(o) => !o && setReportTarget(null)}
+            reportedUserId={reportTarget.userId}
+            reportedUserName={reportTarget.name}
+            postId={reportTarget.postId}
+          />
+        )}
       </div>
     </Layout>
   );
