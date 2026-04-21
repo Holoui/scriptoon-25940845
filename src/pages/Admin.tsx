@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle } from "lucide-react";
+import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle, Flag } from "lucide-react";
 import { AdminChatPanel } from "@/components/AdminChatPanel";
 import { GrantPlanDialog } from "@/components/admin/GrantPlanDialog";
+import { ReportsPanel } from "@/components/admin/ReportsPanel";
 
 type Payment = {
   id: string;
