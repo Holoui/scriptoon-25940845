@@ -241,6 +241,11 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
       return new Response(JSON.stringify({ error: "Couldn't save extension" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Log free-tier extend usage so the rolling cooldown is enforced
+    if (tier === "free") {
+      await admin.from("usage_events").insert({ user_id: userId, kind: "free_extend" });
+    }
+
     const planCapped = trimmed || newWords >= planMaxWords - 50 || newPages >= planMaxPages;
     const targetReached = newWords >= effectiveTarget - 50;
 

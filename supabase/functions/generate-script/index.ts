@@ -20,9 +20,9 @@ interface Body {
 type Tier = "free" | "pro" | "premium";
 
 const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,  dailyGenerations: 5,                  allowSeries: false },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000, dailyGenerations: 20,                 allowSeries: true  },
-  premium: { pages: 150, acts: 50, episodes: 12, words: 50000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true  },
+  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false },
+  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true  },
+  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true  },
 };
 
 const SYSTEM = `You are a professional screenwriter. Output valid JSON only, no prose, no markdown.
