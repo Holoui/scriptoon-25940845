@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 
-interface Opts { title: string; content: string; }
+interface Opts { title: string; content: string; watermark?: boolean; }
 
 /**
  * Industry-standard screenplay PDF:
@@ -12,7 +12,7 @@ interface Opts { title: string; content: string; }
  * - Parentheticals (~3.1")
  * - Page numbers top-right
  */
-export const exportScreenplayPDF = ({ title, content }: Opts) => {
+export const exportScreenplayPDF = ({ title, content, watermark = false }: Opts) => {
   const doc = new jsPDF({ unit: "in", format: "letter" });
   doc.setFont("courier", "normal");
   doc.setFontSize(12);
@@ -36,6 +36,25 @@ export const exportScreenplayPDF = ({ title, content }: Opts) => {
   let y = TOP;
   let page = 1;
 
+  const drawWatermark = () => {
+    if (!watermark) return;
+    // Big diagonal grey watermark across the page
+    doc.saveGraphicsState();
+    // @ts-expect-error - GState exists at runtime
+    doc.setGState(new doc.GState({ opacity: 0.18 }));
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(80);
+    doc.setTextColor(120, 120, 120);
+    doc.text("SCRIPTOON", PAGE_W / 2, PAGE_H / 2, { align: "center", angle: 35, baseline: "middle" });
+    doc.setFontSize(14);
+    doc.text("scripttoon.lovable.app · Free plan", PAGE_W / 2, PAGE_H / 2 + 1.2, { align: "center", angle: 35, baseline: "middle" });
+    doc.restoreGraphicsState();
+    // Restore defaults for body text
+    doc.setFont("courier", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+  };
+
   const addPageNumber = () => {
     doc.setFontSize(12);
     doc.text(`${page}.`, PAGE_W - RIGHT, 0.7, { align: "right" });
@@ -46,6 +65,7 @@ export const exportScreenplayPDF = ({ title, content }: Opts) => {
     doc.addPage();
     page += 1;
     y = TOP;
+    drawWatermark();
   };
 
   const ensureSpace = (lines = 1) => {
@@ -64,6 +84,7 @@ export const exportScreenplayPDF = ({ title, content }: Opts) => {
   };
 
   // Title page
+  drawWatermark();
   doc.setFontSize(18);
   doc.text(title.toUpperCase(), PAGE_W / 2, 4.5, { align: "center" });
   doc.setFontSize(12);
@@ -71,6 +92,7 @@ export const exportScreenplayPDF = ({ title, content }: Opts) => {
   doc.addPage();
   page = 1;
   y = TOP;
+  drawWatermark();
 
   const lines = content.replace(/\r\n/g, "\n").split("\n");
 
