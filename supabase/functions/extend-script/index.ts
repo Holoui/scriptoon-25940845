@@ -7,10 +7,10 @@ const corsHeaders = {
 
 type Tier = "free" | "pro" | "premium";
 
-const LIMITS: Record<Tier, { words: number; pages: number; allowExtend: boolean }> = {
-  free:    { words: 6000,  pages: 12,  allowExtend: false },
-  pro:     { words: 30000, pages: 60,  allowExtend: true  },
-  premium: { words: 50000, pages: 150, allowExtend: true  },
+const LIMITS: Record<Tier, { words: number; pages: number; allowExtend: boolean; dailyExtends: number }> = {
+  free:    { words: 6000,   pages: 12,  allowExtend: true, dailyExtends: 1                       },
+  pro:     { words: 30000,  pages: 60,  allowExtend: true, dailyExtends: Number.MAX_SAFE_INTEGER },
+  premium: { words: 115000, pages: 500, allowExtend: true, dailyExtends: Number.MAX_SAFE_INTEGER },
 };
 
 const WORDS_PER_PAGE = 230;
@@ -64,12 +64,28 @@ Deno.serve(async (req) => {
     const tier: Tier = ((sub?.tier as Tier) ?? "free");
     const limits = LIMITS[tier];
 
-    // Free tier cannot use Extend at all
-    if (!limits.allowExtend) {
-      return new Response(JSON.stringify({
-        error: "The Extend feature is available on the Pro and Premium plans. Upgrade to keep growing your screenplay.",
-        upgrade_required: true,
-      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Free tier — enforce rolling 24h cooldown of 1 Extend per day
+    if (limits.dailyExtends !== Number.MAX_SAFE_INTEGER) {
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recent } = await admin
+        .from("usage_events")
+        .select("created_at")
+        .eq("user_id", userId)
+        .eq("kind", "free_extend")
+        .gte("created_at", windowStart)
+        .order("created_at", { ascending: true });
+      const used = recent?.length ?? 0;
+      if (used >= limits.dailyExtends) {
+        const oldest = recent?.[0]?.created_at ?? new Date().toISOString();
+        const retryAt = new Date(new Date(oldest).getTime() + 24 * 60 * 60 * 1000).toISOString();
+        return new Response(JSON.stringify({
+          error: `Free plan allows ${limits.dailyExtends} Extend per 24 hours. Try again later or upgrade for unlimited.`,
+          rate_limited: true,
+          retry_at: retryAt,
+          used,
+          limit: limits.dailyExtends,
+        }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     const { data: script, error: sErr } = await admin
@@ -223,6 +239,11 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
     if (updErr) {
       console.error(updErr);
       return new Response(JSON.stringify({ error: "Couldn't save extension" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Log free-tier extend usage so the rolling cooldown is enforced
+    if (tier === "free") {
+      await admin.from("usage_events").insert({ user_id: userId, kind: "free_extend" });
     }
 
     const planCapped = trimmed || newWords >= planMaxWords - 50 || newPages >= planMaxPages;

@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target, Lock, Share2 } from "lucide-react";
-import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
+import { ExportDialog } from "@/components/ExportDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
 
@@ -34,7 +34,7 @@ const ScriptEditor = () => {
   const { user, tier } = useAuth();
   const t: Tier = (tier ?? "free") as Tier;
   const limits = PLAN_LIMITS[t];
-  const canExtend = t !== "free";
+  const canExtend = limits.allowExtend;
   const [script, setScript] = useState<Script | null>(null);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -48,6 +48,7 @@ const ScriptEditor = () => {
   const [autoExtend, setAutoExtend] = useState(false);
   const [planCapped, setPlanCapped] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const autoCancelRef = useRef(false);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -127,7 +128,7 @@ const ScriptEditor = () => {
 
   const handleExport = () => {
     if (!script) return;
-    exportScreenplayPDF({ title: title || "Untitled", content });
+    setExportOpen(true);
   };
 
   const extendOnce = async (): Promise<{ done: boolean; added: number; words: number; target: number; capped?: boolean; message?: string } | null> => {
@@ -158,7 +159,7 @@ const ScriptEditor = () => {
   const handleExtend = async () => {
     if (!script || extending) return;
     if (!canExtend) {
-      toast({ title: "Extend is a Pro feature", description: "Upgrade to Pro or Premium to keep growing your screenplay.", variant: "destructive" });
+      toast({ title: "Extend not available on your plan", variant: "destructive" });
       return;
     }
     setExtending(true);
@@ -296,7 +297,7 @@ const ScriptEditor = () => {
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Share2 className="mr-2 h-4 w-4" /> Publish</>}
             </Button>
             <Button size="sm" onClick={handleExport} className="bg-gradient-hero text-white border-0 hover:opacity-90">
-              <Download className="mr-2 h-4 w-4" /> Export PDF
+              <Download className="mr-2 h-4 w-4" /> Export
             </Button>
           </div>
         </div>
@@ -368,30 +369,24 @@ const ScriptEditor = () => {
                           Auto until target
                         </label>
                       )}
-                      {canExtend ? (
-                        <Button
-                          size="sm"
-                          onClick={handleExtend}
-                          disabled={extending || overPlan || planCapped}
-                          className="bg-gradient-hero text-white border-0 hover:opacity-90"
-                        >
-                          {extending ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
-                          ) : (
-                            <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button asChild size="sm" variant="outline">
-                          <Link to="/pricing"><Lock className="mr-2 h-4 w-4" /> Extend (Pro)</Link>
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        onClick={handleExtend}
+                        disabled={extending || overPlan || planCapped}
+                        className="bg-gradient-hero text-white border-0 hover:opacity-90"
+                      >
+                        {extending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extending…</>
+                        ) : (
+                          <><Wand2 className="mr-2 h-4 w-4" /> {reachedTarget ? "Extend more" : "Extend script"}</>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                  {!canExtend && (
+                  {t === "free" && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Lock className="h-3 w-3" />
-                      Continue / Extend is available on the Pro and Premium plans.
+                      Free plan: 1 Extend every 24h. <Link to="/pricing" className="underline ml-1">Upgrade</Link> for unlimited.
                     </p>
                   )}
                   {planCapped && (
@@ -418,6 +413,12 @@ const ScriptEditor = () => {
           </Card>
         </div>
       </div>
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        title={title || "Untitled"}
+        content={content}
+      />
     </Layout>
   );
 };
