@@ -8,6 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, FileText, Loader2, Trash2, Crown, Edit3, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Flame, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
