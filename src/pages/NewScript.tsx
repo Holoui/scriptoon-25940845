@@ -33,6 +33,8 @@ const NewScript = () => {
   const [usedToday, setUsedToday] = useState<number>(0);
   const [retryAt, setRetryAt] = useState<Date | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [nsfwUsed, setNsfwUsed] = useState<number>(0);
+  const [nsfwRetryAt, setNsfwRetryAt] = useState<Date | null>(null);
 
   const wordChoices = useMemo(() => wordOptionsForTier(t), [t]);
   const defaultWords = useMemo(() => Math.min(6000, limits.words), [limits.words]);
@@ -46,6 +48,7 @@ const NewScript = () => {
     acts: 3,
     episodes: 2,
     words: defaultWords,
+    nsfw: false,
   });
 
   const update = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
