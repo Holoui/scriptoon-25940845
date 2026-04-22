@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Download, ArrowLeft, Save, History, Check, AlertTriangle, Wand2, Target, Lock, Share2 } from "lucide-react";
 import { ExportDialog } from "@/components/ExportDialog";
 import { CreateListingDialog } from "@/components/CreateListingDialog";
+import { CoverGenerator } from "@/components/CoverGenerator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { PLAN_LIMITS, countWords, wordsToPages, type Tier } from "@/lib/plan-limits";
 
@@ -26,6 +27,7 @@ interface Script {
   status: string;
   user_id: string;
   target_words: number | null;
+  cover_url: string | null;
 }
 
 interface Version { id: string; version_number: number; created_at: string; content: string; }
@@ -326,6 +328,7 @@ const ScriptEditor = () => {
               </div>
             </div>
           </Card>
+          <div className="lg:hidden" />
 
           <Card className="p-0 overflow-hidden bg-card border-border/60 shadow-soft">
             {(() => {
