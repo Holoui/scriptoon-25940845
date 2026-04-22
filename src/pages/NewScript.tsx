@@ -8,14 +8,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Sparkles, Wand2, Lock } from "lucide-react";
+import { Loader2, Sparkles, Wand2, Lock, Flame } from "lucide-react";
 import { PLAN_LIMITS, wordOptionsForTier, type Tier } from "@/lib/plan-limits";
+import { USAGE_KINDS } from "@/lib/usage";
 
 const GENRES = ["Romance", "Thriller", "Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Fantasy", "Mystery", "Adventure", "LGBTQ+"];
 const TONES = ["Light & playful", "Dark & gritty", "Heartwarming", "Suspenseful", "Quirky & offbeat", "Epic & cinematic", "Satirical"];
+
+const NSFW_LIMITS: Record<Tier, number> = { free: 1, pro: 3, premium: Infinity };
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 const fmtNum = (n: number) => n.toLocaleString();
@@ -29,6 +33,8 @@ const NewScript = () => {
   const [usedToday, setUsedToday] = useState<number>(0);
   const [retryAt, setRetryAt] = useState<Date | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [nsfwUsed, setNsfwUsed] = useState<number>(0);
+  const [nsfwRetryAt, setNsfwRetryAt] = useState<Date | null>(null);
 
   const wordChoices = useMemo(() => wordOptionsForTier(t), [t]);
   const defaultWords = useMemo(() => Math.min(6000, limits.words), [limits.words]);
@@ -42,6 +48,7 @@ const NewScript = () => {
     acts: 3,
     episodes: 2,
     words: defaultWords,
+    nsfw: false,
   });
 
   const update = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
@@ -55,19 +62,34 @@ const NewScript = () => {
     (async () => {
       if (!user) return;
       const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const { data } = await supabase
-        .from("script_generations")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", windowStart.toISOString())
-        .order("created_at", { ascending: true });
-      const used = data?.length ?? 0;
+      const [{ data: gens }, { data: nsfwEvents }] = await Promise.all([
+        supabase
+          .from("script_generations")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .gte("created_at", windowStart.toISOString())
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("usage_events")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .eq("kind", USAGE_KINDS.nsfwGeneration)
+          .gte("created_at", windowStart.toISOString())
+          .order("created_at", { ascending: true }),
+      ]);
+      const used = gens?.length ?? 0;
       setUsedToday(used);
-      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && data?.[0]) {
-        setRetryAt(new Date(new Date(data[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && gens?.[0]) {
+        setRetryAt(new Date(new Date(gens[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      }
+      const nsfwCount = nsfwEvents?.length ?? 0;
+      setNsfwUsed(nsfwCount);
+      const nsfwLimit = NSFW_LIMITS[t];
+      if (isFinite(nsfwLimit) && nsfwCount >= nsfwLimit && nsfwEvents?.[0]) {
+        setNsfwRetryAt(new Date(new Date(nsfwEvents[0].created_at).getTime() + 24 * 60 * 60 * 1000));
       }
     })();
-  }, [user, limits.dailyGenerations]);
+  }, [user, limits.dailyGenerations, t]);
 
   // Tick every second when locked out so countdown updates
   useEffect(() => {
@@ -81,6 +103,12 @@ const NewScript = () => {
   const remaining = unlimited ? Infinity : Math.max(0, dailyLimit - usedToday);
   const cooldownMs = retryAt ? Math.max(0, retryAt.getTime() - now) : 0;
   const blocked = !unlimited && (remaining <= 0 || cooldownMs > 0);
+
+  const nsfwLimit = NSFW_LIMITS[t];
+  const nsfwUnlimited = !isFinite(nsfwLimit);
+  const nsfwRemaining = nsfwUnlimited ? Infinity : Math.max(0, nsfwLimit - nsfwUsed);
+  const nsfwCooldownMs = nsfwRetryAt ? Math.max(0, nsfwRetryAt.getTime() - now) : 0;
+  const nsfwBlocked = !nsfwUnlimited && (nsfwRemaining <= 0 || nsfwCooldownMs > 0);
 
   const formatCooldown = (ms: number) => {
     const totalSec = Math.ceil(ms / 1000);
@@ -106,6 +134,16 @@ const NewScript = () => {
       toast({ title: "Daily limit reached", description: desc, variant: "destructive" });
       return;
     }
+    if (form.nsfw && nsfwBlocked) {
+      toast({
+        title: "NSFW limit reached",
+        description: nsfwCooldownMs > 0
+          ? `You've used all ${nsfwLimit} mature scripts for your ${t} plan. Try again in ${formatCooldown(nsfwCooldownMs)} or upgrade.`
+          : `Your ${t} plan allows ${nsfwLimit} NSFW script${nsfwLimit === 1 ? "" : "s"} every 24 hours.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -117,6 +155,7 @@ const NewScript = () => {
         acts: form.acts,
         words: form.words,
         episodes: form.format === "series" ? form.episodes : undefined,
+        nsfw: form.nsfw,
       };
       const { data, error } = await supabase.functions.invoke("generate-script", { body: payload });
       if (error) throw error;
@@ -125,9 +164,18 @@ const NewScript = () => {
           setRetryAt(new Date(data.retry_at));
           setUsedToday(data.used ?? usedToday);
         }
+        if (data.nsfw_rate_limited && data.retry_at) {
+          setNsfwRetryAt(new Date(data.retry_at));
+          setNsfwUsed(data.used ?? nsfwUsed);
+        }
         throw new Error(data.error);
       }
       toast({ title: "Script ready!", description: data.title });
+      if (form.nsfw && !nsfwUnlimited) {
+        const newCount = nsfwUsed + 1;
+        setNsfwUsed(newCount);
+        if (newCount >= nsfwLimit) setNsfwRetryAt(new Date(Date.now() + 24 * 60 * 60 * 1000));
+      }
       navigate(`/dashboard/scripts/${data.id}`);
     } catch (err: any) {
       toast({ title: "Couldn't generate script", description: err?.message ?? "Generation failed", variant: "destructive" });
@@ -264,6 +312,43 @@ const NewScript = () => {
                   value={form.plot_idea}
                   onChange={(e) => update("plot_idea", e.target.value)}
                 />
+              </div>
+
+              <div className={`rounded-xl border p-4 ${form.nsfw ? "border-primary/60 bg-primary/5" : "border-border/60 bg-muted/20"}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className={`mt-0.5 h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${form.nsfw ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      <Flame className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label htmlFor="nsfw" className="text-base font-semibold cursor-pointer">Include NSFW scenes</Label>
+                        <Badge variant="secondary" className="text-[10px]">18+</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mature themes — sensual moments, graphic violence, strong language. Written tastefully, prestige-cable style. Adults only.
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-2">
+                        {nsfwUnlimited
+                          ? "Premium plan · unlimited NSFW generations"
+                          : nsfwCooldownMs > 0
+                          ? `Locked · retry in ${formatCooldown(nsfwCooldownMs)}`
+                          : `${nsfwRemaining}/${nsfwLimit} NSFW left in next 24h (${t} plan)`}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="nsfw"
+                    checked={form.nsfw}
+                    onCheckedChange={(v) => update("nsfw", v)}
+                    disabled={nsfwBlocked && !form.nsfw}
+                  />
+                </div>
+                {form.nsfw && nsfwBlocked && (
+                  <p className="text-xs text-destructive mt-3">
+                    You've hit your NSFW limit. <a href="/pricing" className="underline">Upgrade</a> for more.
+                  </p>
+                )}
               </div>
 
               {blocked && (

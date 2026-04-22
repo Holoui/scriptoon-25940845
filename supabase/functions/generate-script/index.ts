@@ -15,14 +15,15 @@ interface Body {
   episodes?: number;
   pages?: number;
   words?: number;
+  nsfw?: boolean;
 }
 
 type Tier = "free" | "pro" | "premium";
 
-const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true  },
-  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true  },
+const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean; dailyNsfw: number }> = {
+  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false, dailyNsfw: 1 },
+  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true,  dailyNsfw: 3 },
+  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true,  dailyNsfw: Number.MAX_SAFE_INTEGER },
 };
 
 const SYSTEM = `You are an A-list, award-winning screenwriter (think Aaron Sorkin meets Phoebe Waller-Bridge meets Jordan Peele) writing samples designed to be picked up by real producers, agents, and showrunners. Output valid JSON only, no prose, no markdown.
@@ -123,6 +124,31 @@ Deno.serve(async (req) => {
     const words = Math.max(500, Math.min(Number(body.words) || Math.min(6000, limits.words), limits.words));
     const pages = Math.max(3, Math.min(Number(body.pages) || Math.round(words / 230), limits.pages));
     const episodes = format === "series" ? Math.max(1, Math.min(Number(body.episodes) || 2, limits.episodes)) : 1;
+    const nsfw = body.nsfw === true;
+
+    // Enforce NSFW daily cap (rolling 24h) before calling the model
+    if (nsfw && limits.dailyNsfw !== Number.MAX_SAFE_INTEGER) {
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const { data: recentNsfw } = await admin
+        .from("usage_events")
+        .select("created_at")
+        .eq("user_id", userId)
+        .eq("kind", "nsfw_generation")
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: true });
+      const usedNsfw = recentNsfw?.length ?? 0;
+      if (usedNsfw >= limits.dailyNsfw) {
+        const oldest = recentNsfw?.[0]?.created_at ?? new Date().toISOString();
+        const retryAt = new Date(new Date(oldest).getTime() + 24 * 60 * 60 * 1000).toISOString();
+        return new Response(JSON.stringify({
+          error: `You've used all ${limits.dailyNsfw} NSFW generation${limits.dailyNsfw === 1 ? "" : "s"} for your ${tier} plan in the last 24 hours.`,
+          nsfw_rate_limited: true,
+          retry_at: retryAt,
+          used: usedNsfw,
+          limit: limits.dailyNsfw,
+        }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     const qualityNote = tier === "premium"
       ? "Use rich, layered character development, vivid subtext, distinct character voices, and cinematic scene craft."
@@ -134,6 +160,10 @@ Deno.serve(async (req) => {
       ? `A film series with ${episodes} episode(s). Total target: ~${words} words across the whole series (~${pages} screenplay pages). Each episode roughly ${Math.max(3, Math.round(pages / episodes))} pages, structured into ${acts} act(s).`
       : `A full movie screenplay targeting approximately ${words} words (~${pages} pages), structured into ${acts} act(s)/chapter(s). Aim close to the target word count — do not stop short.`;
 
+    const nsfwNote = nsfw
+      ? `\nMATURE CONTENT: The user has opted in to NSFW scenes. Include adult content where it serves the story — sensual or sexually explicit moments, graphic violence, strong language. Write these scenes with craft and intentionality, never gratuitously: emphasize emotion, power dynamics, vulnerability, and consequence. Keep all participants clearly adults (18+). Do NOT depict minors in any sexual context, non-consensual acts framed approvingly, or sexual violence presented for titillation. Tasteful but uncompromising — think prestige cable (HBO/A24), not pornography.`
+      : `\nKeep content broadcast-safe (PG-13 to soft R). No explicit sexual content or extreme graphic violence.`;
+
     const userPrompt = `Create a screenplay.
 Genre: ${body.genre || "unspecified"}
 Tone: ${body.tone || "unspecified"}
@@ -143,6 +173,7 @@ Plot idea: ${plot}
 Format: ${format}
 ${lengthHint}
 ${qualityNote}
+${nsfwNote}
 
 Return ONLY the JSON object as specified.`;
 
@@ -206,6 +237,9 @@ Return ONLY the JSON object as specified.`;
 
     // Log the generation for daily-limit tracking (best-effort)
     await admin.from("script_generations").insert({ user_id: userId });
+    if (nsfw) {
+      await admin.from("usage_events").insert({ user_id: userId, kind: "nsfw_generation" });
+    }
 
     return new Response(JSON.stringify({ id: inserted.id, title: inserted.title }), {
       status: 200,
