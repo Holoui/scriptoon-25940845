@@ -312,7 +312,8 @@ const ScriptEditor = () => {
         </div>
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-6">
-          <Card className="p-5 bg-gradient-card border-border/60 h-fit lg:sticky lg:top-24">
+          <div className="space-y-4 h-fit lg:sticky lg:top-24">
+          <Card className="p-5 bg-gradient-card border-border/60">
             <div className="space-y-4">
               <div>
                 <label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Title</label>
@@ -328,7 +329,12 @@ const ScriptEditor = () => {
               </div>
             </div>
           </Card>
-          <div className="lg:hidden" />
+          <CoverGenerator
+            scriptId={script.id}
+            initialCoverUrl={script.cover_url}
+            onCoverUpdated={(url) => setScript((s) => (s ? { ...s, cover_url: url } : s))}
+          />
+          </div>
 
           <Card className="p-0 overflow-hidden bg-card border-border/60 shadow-soft">
             {(() => {
