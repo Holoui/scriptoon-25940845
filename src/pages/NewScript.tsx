@@ -14,7 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Sparkles, Wand2, Lock } from "lucide-react";
 import { PLAN_LIMITS, wordOptionsForTier, type Tier } from "@/lib/plan-limits";
 
-const GENRES = ["Romance", "Thriller", "Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Fantasy", "Mystery", "Adventure"];
+const GENRES = ["Romance", "Thriller", "Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Fantasy", "Mystery", "Adventure", "LGBTQ+"];
 const TONES = ["Light & playful", "Dark & gritty", "Heartwarming", "Suspenseful", "Quirky & offbeat", "Epic & cinematic", "Satirical"];
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);

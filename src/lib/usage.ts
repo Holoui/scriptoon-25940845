@@ -34,4 +34,5 @@ export async function logUsage(userId: string, kind: string): Promise<void> {
 export const USAGE_KINDS = {
   watermarkRemoved: "watermark_removed_export",
   freeExtend: "free_extend",
+  coverGeneration: "cover_generation",
 } as const;

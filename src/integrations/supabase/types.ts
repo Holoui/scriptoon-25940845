@@ -427,6 +427,7 @@ export type Database = {
         Row: {
           characters: string | null
           content: string
+          cover_url: string | null
           created_at: string
           genre: string | null
           id: string
@@ -443,6 +444,7 @@ export type Database = {
         Insert: {
           characters?: string | null
           content?: string
+          cover_url?: string | null
           created_at?: string
           genre?: string | null
           id?: string
@@ -459,6 +461,7 @@ export type Database = {
         Update: {
           characters?: string | null
           content?: string
+          cover_url?: string | null
           created_at?: string
           genre?: string | null
           id?: string
