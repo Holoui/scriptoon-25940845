@@ -15,14 +15,15 @@ interface Body {
   episodes?: number;
   pages?: number;
   words?: number;
+  nsfw?: boolean;
 }
 
 type Tier = "free" | "pro" | "premium";
 
-const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true  },
-  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true  },
+const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean; dailyNsfw: number }> = {
+  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false, dailyNsfw: 1 },
+  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true,  dailyNsfw: 3 },
+  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true,  dailyNsfw: Number.MAX_SAFE_INTEGER },
 };
 
 const SYSTEM = `You are an A-list, award-winning screenwriter (think Aaron Sorkin meets Phoebe Waller-Bridge meets Jordan Peele) writing samples designed to be picked up by real producers, agents, and showrunners. Output valid JSON only, no prose, no markdown.
