@@ -62,19 +62,34 @@ const NewScript = () => {
     (async () => {
       if (!user) return;
       const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const { data } = await supabase
-        .from("script_generations")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", windowStart.toISOString())
-        .order("created_at", { ascending: true });
-      const used = data?.length ?? 0;
+      const [{ data: gens }, { data: nsfwEvents }] = await Promise.all([
+        supabase
+          .from("script_generations")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .gte("created_at", windowStart.toISOString())
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("usage_events")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .eq("kind", USAGE_KINDS.nsfwGeneration)
+          .gte("created_at", windowStart.toISOString())
+          .order("created_at", { ascending: true }),
+      ]);
+      const used = gens?.length ?? 0;
       setUsedToday(used);
-      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && data?.[0]) {
-        setRetryAt(new Date(new Date(data[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      if (isFinite(limits.dailyGenerations) && used >= limits.dailyGenerations && gens?.[0]) {
+        setRetryAt(new Date(new Date(gens[0].created_at).getTime() + 24 * 60 * 60 * 1000));
+      }
+      const nsfwCount = nsfwEvents?.length ?? 0;
+      setNsfwUsed(nsfwCount);
+      const nsfwLimit = NSFW_LIMITS[t];
+      if (isFinite(nsfwLimit) && nsfwCount >= nsfwLimit && nsfwEvents?.[0]) {
+        setNsfwRetryAt(new Date(new Date(nsfwEvents[0].created_at).getTime() + 24 * 60 * 60 * 1000));
       }
     })();
-  }, [user, limits.dailyGenerations]);
+  }, [user, limits.dailyGenerations, t]);
 
   // Tick every second when locked out so countdown updates
   useEffect(() => {
