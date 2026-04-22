@@ -104,6 +104,12 @@ const NewScript = () => {
   const cooldownMs = retryAt ? Math.max(0, retryAt.getTime() - now) : 0;
   const blocked = !unlimited && (remaining <= 0 || cooldownMs > 0);
 
+  const nsfwLimit = NSFW_LIMITS[t];
+  const nsfwUnlimited = !isFinite(nsfwLimit);
+  const nsfwRemaining = nsfwUnlimited ? Infinity : Math.max(0, nsfwLimit - nsfwUsed);
+  const nsfwCooldownMs = nsfwRetryAt ? Math.max(0, nsfwRetryAt.getTime() - now) : 0;
+  const nsfwBlocked = !nsfwUnlimited && (nsfwRemaining <= 0 || nsfwCooldownMs > 0);
+
   const formatCooldown = (ms: number) => {
     const totalSec = Math.ceil(ms / 1000);
     const h = Math.floor(totalSec / 3600);
@@ -128,6 +134,16 @@ const NewScript = () => {
       toast({ title: "Daily limit reached", description: desc, variant: "destructive" });
       return;
     }
+    if (form.nsfw && nsfwBlocked) {
+      toast({
+        title: "NSFW limit reached",
+        description: nsfwCooldownMs > 0
+          ? `You've used all ${nsfwLimit} mature scripts for your ${t} plan. Try again in ${formatCooldown(nsfwCooldownMs)} or upgrade.`
+          : `Your ${t} plan allows ${nsfwLimit} NSFW script${nsfwLimit === 1 ? "" : "s"} every 24 hours.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -139,6 +155,7 @@ const NewScript = () => {
         acts: form.acts,
         words: form.words,
         episodes: form.format === "series" ? form.episodes : undefined,
+        nsfw: form.nsfw,
       };
       const { data, error } = await supabase.functions.invoke("generate-script", { body: payload });
       if (error) throw error;
@@ -147,9 +164,18 @@ const NewScript = () => {
           setRetryAt(new Date(data.retry_at));
           setUsedToday(data.used ?? usedToday);
         }
+        if (data.nsfw_rate_limited && data.retry_at) {
+          setNsfwRetryAt(new Date(data.retry_at));
+          setNsfwUsed(data.used ?? nsfwUsed);
+        }
         throw new Error(data.error);
       }
       toast({ title: "Script ready!", description: data.title });
+      if (form.nsfw && !nsfwUnlimited) {
+        const newCount = nsfwUsed + 1;
+        setNsfwUsed(newCount);
+        if (newCount >= nsfwLimit) setNsfwRetryAt(new Date(Date.now() + 24 * 60 * 60 * 1000));
+      }
       navigate(`/dashboard/scripts/${data.id}`);
     } catch (err: any) {
       toast({ title: "Couldn't generate script", description: err?.message ?? "Generation failed", variant: "destructive" });
