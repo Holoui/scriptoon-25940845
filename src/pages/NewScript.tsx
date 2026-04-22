@@ -314,6 +314,43 @@ const NewScript = () => {
                 />
               </div>
 
+              <div className={`rounded-xl border p-4 ${form.nsfw ? "border-primary/60 bg-primary/5" : "border-border/60 bg-muted/20"}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className={`mt-0.5 h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${form.nsfw ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      <Flame className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label htmlFor="nsfw" className="text-base font-semibold cursor-pointer">Include NSFW scenes</Label>
+                        <Badge variant="secondary" className="text-[10px]">18+</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mature themes — sensual moments, graphic violence, strong language. Written tastefully, prestige-cable style. Adults only.
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-2">
+                        {nsfwUnlimited
+                          ? "Premium plan · unlimited NSFW generations"
+                          : nsfwCooldownMs > 0
+                          ? `Locked · retry in ${formatCooldown(nsfwCooldownMs)}`
+                          : `${nsfwRemaining}/${nsfwLimit} NSFW left in next 24h (${t} plan)`}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="nsfw"
+                    checked={form.nsfw}
+                    onCheckedChange={(v) => update("nsfw", v)}
+                    disabled={nsfwBlocked && !form.nsfw}
+                  />
+                </div>
+                {form.nsfw && nsfwBlocked && (
+                  <p className="text-xs text-destructive mt-3">
+                    You've hit your NSFW limit. <a href="/pricing" className="underline">Upgrade</a> for more.
+                  </p>
+                )}
+              </div>
+
               {blocked && (
                 <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-center space-y-1">
                   <p className="text-sm font-semibold text-destructive flex items-center justify-center gap-2">
