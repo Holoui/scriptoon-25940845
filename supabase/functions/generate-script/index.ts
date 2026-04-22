@@ -237,6 +237,9 @@ Return ONLY the JSON object as specified.`;
 
     // Log the generation for daily-limit tracking (best-effort)
     await admin.from("script_generations").insert({ user_id: userId });
+    if (nsfw) {
+      await admin.from("usage_events").insert({ user_id: userId, kind: "nsfw_generation" });
+    }
 
     return new Response(JSON.stringify({ id: inserted.id, title: inserted.title }), {
       status: 200,
