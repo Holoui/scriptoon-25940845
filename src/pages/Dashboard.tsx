@@ -234,6 +234,72 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Safe NSFW preview toggle — shows what mature content looks like without revealing explicit text */}
+        <Card className="p-4 md:p-5 mb-6 bg-gradient-card border-border/60">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`mt-0.5 h-9 w-9 rounded-lg grid place-items-center shrink-0 ${nsfwPreview ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                <Flame className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-display text-base font-bold">Safe NSFW preview</p>
+                  <Badge variant="secondary" className="text-[10px] gap-1"><ShieldCheck className="h-3 w-3" /> Safe-for-work</Badge>
+                  <Badge variant="outline" className="text-[10px]">18+ opt-in</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  See what mature scripts <em>look like</em> on Scriptoon — without explicit text. Toggle on to reveal a slightly more descriptive (still safe) example. Generated NSFW scenes only ever appear inside your own scripts when you opt in at generation time.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={nsfwPreview}
+              onCheckedChange={setNsfwPreview}
+              aria-label="Toggle safe NSFW preview"
+            />
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              {
+                tag: "Sensual",
+                safe: "A charged glance across a dim hotel bar. He sets his glass down. She doesn't move.",
+                hint: "Slow-burn intimacy framed through subtext, body language, and what is NOT said.",
+              },
+              {
+                tag: "Graphic violence",
+                safe: "Tires scream. Glass becomes weather. Two strangers learn each other's names through bruises.",
+                hint: "Consequence-driven action — every wound costs the character something later.",
+              },
+              {
+                tag: "Strong language",
+                safe: "She tells him exactly where to go and which route to take. He laughs. It's not funny.",
+                hint: "Profanity used as character voice, not shock — sparingly, and always in-character.",
+              },
+            ].map((ex) => (
+              <div key={ex.tag} className="rounded-xl border border-border/60 bg-background/40 p-3">
+                <Badge variant="outline" className="text-[10px] mb-2">{ex.tag}</Badge>
+                <p className="text-sm leading-snug">{ex.safe}</p>
+                {nsfwPreview ? (
+                  <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1.5">
+                    <Eye className="h-3 w-3 mt-0.5 shrink-0" /> {ex.hint}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                    <EyeOff className="h-3 w-3 shrink-0" /> Toggle on to see how this scene is approached.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> No explicit text shown here — ever.</span>
+            <span>Free: 1/24h NSFW · Pro: 3/24h · Premium: unlimited.</span>
+            <Link to="/dashboard/new" className="text-primary underline">Try the NSFW switch in the generator →</Link>
+          </div>
+        </Card>
+
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
         ) : scripts.length === 0 ? (
