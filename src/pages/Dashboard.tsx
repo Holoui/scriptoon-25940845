@@ -45,6 +45,16 @@ const Dashboard = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // Safe NSFW preview — purely presentational. Persisted per-browser.
+  // Default OFF so explicit-themed text never appears unless the user opts in.
+  const [nsfwPreview, setNsfwPreview] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("nsfw_preview") === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("nsfw_preview", nsfwPreview ? "1" : "0");
+  }, [nsfwPreview]);
   const mountedRef = useRef(true);
 
   const t: Tier = (tier ?? "free") as Tier;
