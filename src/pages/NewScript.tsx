@@ -8,14 +8,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Sparkles, Wand2, Lock } from "lucide-react";
+import { Loader2, Sparkles, Wand2, Lock, Flame } from "lucide-react";
 import { PLAN_LIMITS, wordOptionsForTier, type Tier } from "@/lib/plan-limits";
+import { USAGE_KINDS } from "@/lib/usage";
 
 const GENRES = ["Romance", "Thriller", "Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Fantasy", "Mystery", "Adventure", "LGBTQ+"];
 const TONES = ["Light & playful", "Dark & gritty", "Heartwarming", "Suspenseful", "Quirky & offbeat", "Epic & cinematic", "Satirical"];
+
+const NSFW_LIMITS: Record<Tier, number> = { free: 1, pro: 3, premium: Infinity };
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 const fmtNum = (n: number) => n.toLocaleString();
