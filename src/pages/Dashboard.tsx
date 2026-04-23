@@ -11,6 +11,7 @@ import { Plus, FileText, Loader2, Trash2, Crown, Edit3, Clock, CheckCircle2, XCi
 import { Flame, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
+import { exportScreenplayPDF } from "@/lib/screenplay-pdf";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
