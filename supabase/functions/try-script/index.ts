@@ -74,7 +74,9 @@ Return ONLY the JSON object as specified.`;
       return new Response(JSON.stringify({ error: "Lots of writers right now — please try again in a moment." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (aiRes.status === 402) {
-      return new Response(JSON.stringify({ error: "Demo temporarily unavailable. Please try again soon." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({
+        error: "AI credits are exhausted on this workspace. Add credits in Lovable Cloud → Workspace settings to re-enable the free demo.",
+      }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!aiRes.ok) {
       const txt = await aiRes.text();
