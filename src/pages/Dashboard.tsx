@@ -56,6 +56,26 @@ const Dashboard = () => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("nsfw_preview", nsfwPreview ? "1" : "0");
   }, [nsfwPreview]);
+
+  // If the visitor generated a free teaser on the landing page and then signed
+  // in to download it, finish that download as soon as the dashboard mounts.
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem("pending_demo_pdf");
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw) as { title: string; screenplay: string };
+      if (data?.screenplay) {
+        exportScreenplayPDF({ title: data.title || "ScriptToon Teaser", content: data.screenplay, watermark: true });
+        toast({ title: "Here's your teaser PDF", description: "Downloaded with your free plan." });
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      window.sessionStorage.removeItem("pending_demo_pdf");
+    }
+  }, [user]);
+
   const mountedRef = useRef(true);
 
   const t: Tier = (tier ?? "free") as Tier;
