@@ -95,6 +95,9 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Try it free — generate a teaser without signing up */}
+      <TryItDemo />
+
       {/* Features grid — webtoon-style cards */}
       <section className="container py-16">
         <h2 className="font-display text-4xl md:text-5xl font-bold text-center mb-12">
