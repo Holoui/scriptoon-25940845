@@ -7,6 +7,7 @@ import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Separator } from "@/components/ui/separator";
 import { Sparkles, Zap, FileText, Crown, Wand2, Download, PenLine, Quote, CheckCircle2, Stars } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { TryItDemo } from "@/components/TryItDemo";
 import heroImage from "@/assets/landing-hero-scripttoon.jpg";
 import pagesImage from "@/assets/landing-script-pages.jpg";
 
