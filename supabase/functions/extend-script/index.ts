@@ -8,8 +8,8 @@ const corsHeaders = {
 type Tier = "free" | "pro" | "premium";
 
 const LIMITS: Record<Tier, { words: number; pages: number; allowExtend: boolean; dailyExtends: number }> = {
-  free:    { words: 6000,   pages: 12,  allowExtend: true, dailyExtends: 1                       },
-  pro:     { words: 30000,  pages: 60,  allowExtend: true, dailyExtends: Number.MAX_SAFE_INTEGER },
+  free: { words: 6000, pages: 12, allowExtend: true, dailyExtends: 1 },
+  pro: { words: 30000, pages: 60, allowExtend: true, dailyExtends: Number.MAX_SAFE_INTEGER },
   premium: { words: 115000, pages: 500, allowExtend: true, dailyExtends: Number.MAX_SAFE_INTEGER },
 };
 
@@ -39,8 +39,8 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -107,56 +107,37 @@ Deno.serve(async (req) => {
     const currentWords = countWords(script.content || "");
     const currentPages = Math.round((currentWords / WORDS_PER_PAGE) * 10) / 10;
 
-    // Plan cap reached — refuse to extend further and notify the user
     if (currentWords >= planMaxWords - 50 || currentPages >= planMaxPages) {
       return new Response(JSON.stringify({
-        capped: true,
-        done: true,
-        plan_capped: true,
-        words: currentWords,
-        pages: currentPages,
-        plan_max_words: planMaxWords,
-        plan_max_pages: planMaxPages,
-        target: effectiveTarget,
-        added: 0,
-        content: script.content,
+        capped: true, done: true, plan_capped: true,
+        words: currentWords, pages: currentPages,
+        plan_max_words: planMaxWords, plan_max_pages: planMaxPages,
+        target: effectiveTarget, added: 0, content: script.content,
         message: `You've hit your ${tier} plan ceiling of ${planMaxWords.toLocaleString()} words (~${planMaxPages} pages). ${tier === "premium" ? "Start a new script to keep writing." : "Upgrade to extend further."}`,
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const remaining = effectiveTarget - currentWords;
-
     if (remaining <= 50) {
       return new Response(JSON.stringify({
         message: "Already at or above target",
-        words: currentWords,
-        target: effectiveTarget,
-        added: 0,
-        done: true,
+        words: currentWords, target: effectiveTarget, added: 0, done: true,
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Don't let one chunk push us past the plan cap
     const headroom = Math.max(0, planMaxWords - currentWords - 100);
     const chunkTarget = Math.min(remaining, 3500, headroom);
 
     if (chunkTarget < 200) {
       return new Response(JSON.stringify({
-        capped: true,
-        done: true,
-        plan_capped: true,
-        words: currentWords,
-        pages: currentPages,
-        plan_max_words: planMaxWords,
-        plan_max_pages: planMaxPages,
-        target: effectiveTarget,
-        added: 0,
-        content: script.content,
+        capped: true, done: true, plan_capped: true,
+        words: currentWords, pages: currentPages,
+        plan_max_words: planMaxWords, plan_max_pages: planMaxPages,
+        target: effectiveTarget, added: 0, content: script.content,
         message: `You're within reach of your ${tier} plan ceiling (~${planMaxWords.toLocaleString()} words). ${tier === "premium" ? "Start a new script to keep writing." : "Upgrade to extend further."}`,
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Use last ~2500 words as context tail to keep continuity within model limits
     const tailWords = script.content.split(/\s+/);
     const tailStart = Math.max(0, tailWords.length - 2500);
     const tail = tailWords.slice(tailStart).join(" ");
@@ -179,26 +160,22 @@ ${tail}
 
 Now write ONLY the new screenplay continuation to append. No preface, no recap, no JSON, no markdown — just the raw screenplay text.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
+    // ── Gemini API call ──────────────────────────────────────────────────────
+    const aiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+        }),
+      }
+    );
+    // ────────────────────────────────────────────────────────────────────────
 
     if (aiRes.status === 429) {
       return new Response(JSON.stringify({ error: "Rate limit hit. Please wait a moment and try again." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (aiRes.status === 402) {
-      return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits in Lovable Cloud → Workspace settings." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!aiRes.ok) {
       const txt = await aiRes.text();
@@ -207,9 +184,10 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
     }
 
     const aiJson = await aiRes.json();
-    let extension = (aiJson.choices?.[0]?.message?.content ?? "").toString().trim();
+    // ── Gemini response shape ─────────────────────────────────────────────
+    let extension = (aiJson.candidates?.[0]?.content?.parts?.[0]?.text ?? "").toString().trim();
+    // ─────────────────────────────────────────────────────────────────────
 
-    // Strip accidental code fences or JSON wrappers
     extension = extension.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/g, "").trim();
 
     if (!extension) {
@@ -219,7 +197,6 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
     let newContent = (script.content.endsWith("\n") ? script.content : script.content + "\n\n") + extension;
     let newWords = countWords(newContent);
 
-    // Hard-trim if AI overshot the plan cap
     let trimmed = false;
     if (newWords > planMaxWords) {
       const allWords = newContent.split(/\s+/).filter(Boolean);
@@ -241,7 +218,6 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
       return new Response(JSON.stringify({ error: "Couldn't save extension" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Log free-tier extend usage so the rolling cooldown is enforced
     if (tier === "free") {
       await admin.from("usage_events").insert({ user_id: userId, kind: "free_extend" });
     }
@@ -251,22 +227,17 @@ Now write ONLY the new screenplay continuation to append. No preface, no recap, 
 
     return new Response(JSON.stringify({
       content: newContent,
-      words: newWords,
-      pages: newPages,
+      words: newWords, pages: newPages,
       target: effectiveTarget,
       added: newWords - currentWords,
       done: targetReached || planCapped,
-      capped: planCapped,
-      plan_capped: planCapped,
-      plan_max_words: planMaxWords,
-      plan_max_pages: planMaxPages,
+      capped: planCapped, plan_capped: planCapped,
+      plan_max_words: planMaxWords, plan_max_pages: planMaxPages,
       message: planCapped
         ? `You've reached your ${tier} plan ceiling of ~${planMaxWords.toLocaleString()} words. ${tier === "premium" ? "Start a new script to keep writing." : "Upgrade to extend further."}`
         : undefined,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: "Unexpected error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

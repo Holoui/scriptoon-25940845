@@ -21,9 +21,9 @@ interface Body {
 type Tier = "free" | "pro" | "premium";
 
 const LIMITS: Record<Tier, { pages: number; acts: number; episodes: number; words: number; dailyGenerations: number; allowSeries: boolean; dailyNsfw: number }> = {
-  free:    { pages: 12,  acts: 2,  episodes: 2,  words: 6000,   dailyGenerations: 5,                       allowSeries: false, dailyNsfw: 1 },
-  pro:     { pages: 60,  acts: 10, episodes: 6,  words: 30000,  dailyGenerations: 20,                      allowSeries: true,  dailyNsfw: 3 },
-  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true,  dailyNsfw: Number.MAX_SAFE_INTEGER },
+  free: { pages: 12, acts: 2, episodes: 2, words: 6000, dailyGenerations: 5, allowSeries: false, dailyNsfw: 1 },
+  pro: { pages: 60, acts: 10, episodes: 6, words: 30000, dailyGenerations: 20, allowSeries: true, dailyNsfw: 3 },
+  premium: { pages: 500, acts: 50, episodes: 12, words: 115000, dailyGenerations: Number.MAX_SAFE_INTEGER, allowSeries: true, dailyNsfw: Number.MAX_SAFE_INTEGER },
 };
 
 const SYSTEM = `You are an A-list, award-winning screenwriter (think Aaron Sorkin meets Phoebe Waller-Bridge meets Jordan Peele) writing samples designed to be picked up by real producers, agents, and showrunners. Output valid JSON only, no prose, no markdown.
@@ -71,8 +71,8 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -105,7 +105,6 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: true });
       const usedInWindow = recent?.length ?? 0;
       if (usedInWindow >= limits.dailyGenerations) {
-        // Cooldown ends 24h after the OLDEST generation in the current window
         const oldest = recent?.[0]?.created_at ?? new Date().toISOString();
         const retryAt = new Date(new Date(oldest).getTime() + 24 * 60 * 60 * 1000).toISOString();
         return new Response(JSON.stringify({
@@ -153,8 +152,8 @@ Deno.serve(async (req) => {
     const qualityNote = tier === "premium"
       ? "Use rich, layered character development, vivid subtext, distinct character voices, and cinematic scene craft."
       : tier === "pro"
-      ? "Maintain professional pacing and clear character arcs."
-      : "Keep it concise and clear — this is a free-tier sample.";
+        ? "Maintain professional pacing and clear character arcs."
+        : "Keep it concise and clear — this is a free-tier sample.";
 
     const lengthHint = format === "series"
       ? `A film series with ${episodes} episode(s). Total target: ~${words} words across the whole series (~${pages} screenplay pages). Each episode roughly ${Math.max(3, Math.round(pages / episodes))} pages, structured into ${acts} act(s).`
@@ -177,27 +176,21 @@ ${nsfwNote}
 
 Return ONLY the JSON object as specified.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const aiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      }
+    );
 
     if (aiRes.status === 429) {
       return new Response(JSON.stringify({ error: "Rate limit hit. Please wait a moment and try again." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (aiRes.status === 402) {
-      return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits in Lovable Cloud → Workspace settings." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!aiRes.ok) {
       const txt = await aiRes.text();
@@ -206,7 +199,7 @@ Return ONLY the JSON object as specified.`;
     }
 
     const aiJson = await aiRes.json();
-    const raw = aiJson.choices?.[0]?.message?.content ?? "{}";
+    const raw = aiJson.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
     let parsed: any;
     try { parsed = JSON.parse(raw); }
     catch {

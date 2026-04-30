@@ -33,8 +33,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -54,29 +54,21 @@ Plot idea: ${plot}
 
 Return ONLY the JSON object as specified.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const aiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      }
+    );
 
     if (aiRes.status === 429) {
       return new Response(JSON.stringify({ error: "Lots of writers right now — please try again in a moment." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (aiRes.status === 402) {
-      return new Response(JSON.stringify({
-        error: "AI credits are exhausted on this workspace. Add credits in Lovable Cloud → Workspace settings to re-enable the free demo.",
-      }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!aiRes.ok) {
       const txt = await aiRes.text();
@@ -85,7 +77,7 @@ Return ONLY the JSON object as specified.`;
     }
 
     const aiJson = await aiRes.json();
-    const raw = aiJson.choices?.[0]?.message?.content ?? "{}";
+    const raw = aiJson.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
     let parsed: any;
     try { parsed = JSON.parse(raw); }
     catch {
