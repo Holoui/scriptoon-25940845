@@ -50,7 +50,7 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
     const redirectUrl = `${window.location.origin}/dashboard`;
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: redirectUrl, data: { display_name: name } },
@@ -59,6 +59,27 @@ const Auth = () => {
     if (error) {
       toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
       return;
+    }
+    // Attach a referral if one was captured earlier
+    const refCode = localStorage.getItem("scriptoon_ref");
+    if (refCode && data.user?.id) {
+      try {
+        const { data: aff } = await supabase
+          .from("affiliates")
+          .select("user_id")
+          .eq("referral_code", refCode)
+          .maybeSingle();
+        if (aff?.user_id && aff.user_id !== data.user.id) {
+          await supabase.from("referrals").insert({
+            affiliate_user_id: aff.user_id,
+            referred_user_id: data.user.id,
+          });
+        }
+      } catch (err) {
+        console.warn("[referral] attach failed", err);
+      } finally {
+        localStorage.removeItem("scriptoon_ref");
+      }
     }
     toast({ title: "Check your email", description: "Confirm your address to log in." });
   };
