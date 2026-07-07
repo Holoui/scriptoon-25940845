@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_earnings: {
+        Row: {
+          affiliate_user_id: string
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          payment_id: string | null
+          referred_user_id: string
+          status: string
+        }
+        Insert: {
+          affiliate_user_id: string
+          amount: number
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_id?: string | null
+          referred_user_id: string
+          status?: string
+        }
+        Update: {
+          affiliate_user_id?: string
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_id?: string | null
+          referred_user_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_earnings_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliates: {
+        Row: {
+          created_at: string
+          referral_code: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          referral_code: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          referral_code?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       community_posts: {
         Row: {
           author_name: string | null
@@ -316,6 +378,27 @@ export type Database = {
           email?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          affiliate_user_id: string
+          created_at: string
+          id: string
+          referred_user_id: string
+        }
+        Insert: {
+          affiliate_user_id: string
+          created_at?: string
+          id?: string
+          referred_user_id: string
+        }
+        Update: {
+          affiliate_user_id?: string
+          created_at?: string
+          id?: string
+          referred_user_id?: string
         }
         Relationships: []
       }
@@ -716,6 +799,54 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      withdrawal_requests: {
+        Row: {
+          account_name: string
+          admin_note: string | null
+          affiliate_user_id: string
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          phone_number: string
+          processed_at: string | null
+          processed_by: string | null
+          provider: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_name: string
+          admin_note?: string | null
+          affiliate_user_id: string
+          amount: number
+          created_at?: string
+          currency?: string
+          id?: string
+          phone_number: string
+          processed_at?: string | null
+          processed_by?: string | null
+          provider: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string
+          admin_note?: string | null
+          affiliate_user_id?: string
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          phone_number?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          provider?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
