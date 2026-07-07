@@ -19,6 +19,7 @@ import Admin from "./pages/Admin";
 import Profile from "./pages/Profile";
 import Marketplace from "./pages/Marketplace";
 import ListingDetail from "./pages/ListingDetail";
+import Affiliate from "./pages/Affiliate";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/marketplace/:id" element={<ListingDetail />} />
             <Route path="/u/:userId" element={<Profile />} />
+            <Route path="/affiliate" element={<ProtectedRoute><Affiliate /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/dashboard/new" element={<ProtectedRoute><NewScript /></ProtectedRoute>} />
             <Route path="/dashboard/scripts/:id" element={<ProtectedRoute><ScriptEditor /></ProtectedRoute>} />
