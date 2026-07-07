@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +14,15 @@ import pagesImage from "@/assets/landing-script-pages.jpg";
 
 const Index = () => {
   const { user } = useAuth();
+
+  // Capture ?ref=CODE for the affiliate program
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      localStorage.setItem("scriptoon_ref", ref);
+    }
+  }, []);
 
   const features = [
     { icon: Wand2, title: "AI screenplay engine", desc: "Logline, synopsis, full script — generated in seconds." },
