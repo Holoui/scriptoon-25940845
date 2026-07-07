@@ -7,10 +7,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle, Flag } from "lucide-react";
+import { Shield, Users, FileText, CreditCard, Loader2, Check, X, Mail, MessageCircle, Flag, DollarSign } from "lucide-react";
 import { AdminChatPanel } from "@/components/AdminChatPanel";
 import { GrantPlanDialog } from "@/components/admin/GrantPlanDialog";
 import { ReportsPanel } from "@/components/admin/ReportsPanel";
+import { AffiliatePanel } from "@/components/admin/AffiliatePanel";
 
 type Payment = {
   id: string;
@@ -34,11 +35,12 @@ const Admin = () => {
   const [contacts, setContacts] = useState<any[]>([]);
   const [unreadChats, setUnreadChats] = useState(0);
   const [openReports, setOpenReports] = useState(0);
+  const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
 
   const profileFor = (uid: string) => profiles.find((p) => p.id === uid);
 
   const load = async () => {
-    const [p, s, pay, sub, msgs, threads, reps] = await Promise.all([
+    const [p, s, pay, sub, msgs, threads, reps, wd] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("scripts").select("id, title, genre, status, user_id, updated_at").order("updated_at", { ascending: false }),
       supabase.from("payments").select("*").order("created_at", { ascending: false }),
@@ -46,6 +48,7 @@ const Admin = () => {
       supabase.from("contact_messages").select("*").order("created_at", { ascending: false }),
       supabase.from("support_threads").select("unread_for_admin").eq("unread_for_admin", true),
       supabase.from("user_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+      supabase.from("withdrawal_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
     ]);
     setProfiles(p.data ?? []);
     setScripts(s.data ?? []);
@@ -54,6 +57,7 @@ const Admin = () => {
     setContacts(msgs.data ?? []);
     setUnreadChats(threads.data?.length ?? 0);
     setOpenReports(reps.count ?? 0);
+    setPendingWithdrawals(wd.count ?? 0);
     setLoading(false);
   };
 
@@ -173,6 +177,10 @@ const Admin = () => {
             <TabsTrigger value="reports">
               <Flag className="h-4 w-4 mr-1" /> Reports
               {openReports > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{openReports}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="affiliate">
+              <DollarSign className="h-4 w-4 mr-1" /> Affiliate
+              {pendingWithdrawals > 0 && <Badge className="ml-2 bg-destructive text-destructive-foreground">{pendingWithdrawals}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
@@ -361,6 +369,10 @@ const Admin = () => {
 
           <TabsContent value="reports">
             <ReportsPanel />
+          </TabsContent>
+
+          <TabsContent value="affiliate">
+            <AffiliatePanel profiles={profiles} />
           </TabsContent>
         </Tabs>
       </div>

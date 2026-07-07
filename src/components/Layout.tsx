@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield, Users, Tag, User } from "lucide-react";
+import { Film, Moon, Sun, Menu, X, LayoutDashboard, Sparkles, Crown, Mail, Info, LogOut, Shield, Users, Tag, User, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SupportChat } from "@/components/SupportChat";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -41,6 +41,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     ? [
         { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { to: `/u/${user.id}`, label: "My profile", icon: User },
+        { to: "/affiliate", label: "Affiliate", icon: DollarSign },
         ...(role === "admin" ? [{ to: "/admin", label: "Admin", icon: Shield }] : []),
       ]
     : [];
